@@ -1,10 +1,6 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#ifndef u_int64_t
-#define u_int64_t uint64_t
-#endif
-
 /* initialize the cycle counter */
 u_int64_t start = 0;
 

@@ -14,4 +14,4 @@ tsc.o: tsc.c
 
 # To remove generated files
 clean:
-	rm -f parta $(OBJECTS)
+	rm -f parta tsc.o

@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include "tsc.h"
+#include <stdint.h>
 
-u_int64_t inactive_periods(int num, u_int64_t threshold, u_int64_t *samples){
+
+uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
 }
 
@@ -10,7 +12,7 @@ int main () {
 
 	start_counter();
 
-	u_int64_t tmp = get_counter();
+	uint64_t tmp = get_counter();
 
 	printf("%u\n", tmp);	
 

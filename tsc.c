@@ -1,9 +1,8 @@
-#include <sys/types.h>
 #include <stdint.h>
 #include "tsc.h"
 
 /* initialize the cycle counter */
-u_int64_t start = 0;
+uint64_t start = 0;
 
 
 /* Set *hi and *lo to the high and low order bits of the cycle counter.
@@ -21,17 +20,17 @@ void start_counter()
 {
   unsigned hi, lo;
   access_counter(&hi, &lo);
-  start = ((u_int64_t)hi << 32) | lo;
+  start = ((uint64_t)hi << 32) | lo;
 }
 
-u_int64_t get_counter()
+uint64_t get_counter()
 {
   unsigned ncyc_hi, ncyc_lo;
 
   /* Get the cycle counter */
   access_counter(&ncyc_hi, &ncyc_lo);
 
-  return (((u_int64_t)ncyc_hi << 32) | ncyc_lo) - start;
+  return (((uint64_t)ncyc_hi << 32) | ncyc_lo) - start;
 
 }
 

@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <stdint.h>
+#include "tsc.h"
 
 /* initialize the cycle counter */
 u_int64_t start = 0;

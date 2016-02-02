@@ -1,2 +1,3 @@
 Parta: parta.c
-	gcc -g parta.c tsc.c
+	gcc -m32 -g parta.c tsc.c
+

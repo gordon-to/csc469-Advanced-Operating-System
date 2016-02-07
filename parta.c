@@ -6,48 +6,59 @@
 #include <unistd.h>
 #include <sched.h>
 
-extern uint64_t start;
-
+uint64_t CPUFREQ;
 
 uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
-	uint64_t ret = get_counter(), tmp = ret;
 	int i;
+	start_counter();
+	uint64_t start, prev, next;
+	start = get_counter();
+	prev = start;
+
 	for (i = 0; i < num; i++){
-		start_counter();
-		while(get_counter() < threshold)
-			
-		printf("Active %d: start at %u, duration %u cycles\n", i, start, tmp);
-		tmp = get_counter();
+		while(next = get_counter()){
+			if ((next - prev) > threshold){
+				printf("Active %d: start at %u, duration %u cycles (%u ms)\n", i, prev, next - prev, (next-prev)/CPUFREQ);
+			}
+		}
+
 	}
-	return ret;
+	return start;
 }
 
-void getcpu_freq(uint64_t * cpufreq){
-	int microseconds = 1;
+uint64_t getcpu_freq(){
+	//gets cpu freq
+	int microseconds = 1000, i, cpu_k_polls;
 	start_counter();
-	usleep(microseconds);
-	*cpufreq = get_counter() * (100/microseconds);
+	uint64_t prev;
+	uint64_t sum = 0;
+	cpu_k_polls = 1000;
+	for(i=0;i<cpu_k_polls;i++){
+		prev = get_counter();
+		usleep(microseconds);
+		sum += (get_counter() - prev) * (1000000/microseconds); 
+	}
+	return sum/cpu_k_polls;
 }
 
 
 int main (int argc, char ** argv) {
 
-	int num, length;
+	int num;
 	cpu_set_t cpuset;
 	uint64_t threshold;
 	uint64_t *samples;
-	uint64_t *cpufreq;
-	length = num;
-	cpufreq = malloc(sizeof(uint64_t));
-	samples = malloc(sizeof(uint64_t) * length);
 
 	if (argc > 2) {
 		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
 		exit(0);
 	}
 
+	threshold = 0;
 	num = (argc == 2) ? atoi(argv[1]) : 1;
+
+	samples = malloc(sizeof(uint64_t) * num * 2);
 
 	CPU_ZERO(&cpuset);
 	CPU_SET(0, &cpuset);
@@ -56,12 +67,12 @@ int main (int argc, char ** argv) {
 		fprintf(stderr, "%s\n", "sched_setaffinity");
 
 	//getcpu frequency
-	while(1){
-		getcpu_freq(cpufreq);
-		printf("%u\n", *cpufreq);
+	while (1){
+		CPUFREQ = getcpu_freq();
+		printf("%u Mhz\n", CPUFREQ/1000000);
 	}
 
-	inactive_periods(num, threshold, samples);
+	// inactive_periods(num, tmhreshold, samples);
 
 	return 0;
 	

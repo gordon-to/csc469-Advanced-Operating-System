@@ -26,14 +26,15 @@ uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 			difference = next - prev;
 			ms_time = ((double) (difference * 100)/ (double) CPUFREQ);
 			if (difference > threshold && active){
-				printf("Active %d: start at, duration %lu cycles (%f ms)\n", i, start, summ, ms_time);
+				printf("Active %d: start at, duration %lu cycles (%f ms)\n", i/2, start, summ, ms_time);
 				samples[i] = start;
 				samples[i+1] = prev;
 				active = 0;
 				break;
 			} else if (difference < threshold && !active){
-				printf("Inactive %d: start at %lu, duration %lu cycles (%f ms)\n", i, start, summ, ms_time);
+				printf("Inactive %d: start at %lu, duration %lu cycles (%f ms)\n", i/2, start, summ, ms_time);
 				active = 1;
+				break;
 			} else {
 				summ += difference;
 			}

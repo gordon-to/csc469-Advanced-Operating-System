@@ -27,9 +27,9 @@ uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 	return start;
 }
 
-uint64_t getcpu_freq(){
+uint64_t getcpu_freq(int microseconds){
 	//gets cpu freq
-	int microseconds = 1000, i, cpu_k_polls;
+	int i, cpu_k_polls;
 	start_counter();
 	uint64_t prev;
 	uint64_t sum = 0;
@@ -50,13 +50,16 @@ int main (int argc, char ** argv) {
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc > 2) {
+	if (argc > 3) { //change back to 2
 		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
 		exit(0);
 	}
 
 	threshold = 0;
 	num = (argc == 2) ? atoi(argv[1]) : 1;
+
+	int microseconds;
+	microseconds = (argc == 3) ? atoi(argv[2]) : 1000;
 
 	samples = malloc(sizeof(uint64_t) * num * 2);
 
@@ -68,7 +71,7 @@ int main (int argc, char ** argv) {
 
 	//getcpu frequency
 	while (1){
-		CPUFREQ = getcpu_freq();
+		CPUFREQ = getcpu_freq(microseconds);
 		printf("%u Mhz\n", CPUFREQ/1000000);
 	}
 

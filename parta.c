@@ -12,7 +12,8 @@ extern uint64_t start;
 uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
 	uint64_t ret = get_counter(), tmp = ret;
-	for (int i = 0; i < num; i++){
+	int i;
+	for (i = 0; i < num; i++){
 		start_counter();
 		while(get_counter() < threshold)
 			
@@ -23,7 +24,6 @@ uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 }
 
 void getcpu_freq(uint64_t * cpufreq){
-
 	int microseconds = 1;
 	start_counter();
 	usleep(microseconds);

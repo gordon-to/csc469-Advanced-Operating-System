@@ -10,20 +10,28 @@ uint64_t CPUFREQ;
 
 uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
-	int i;
+	int i, num_inact;
 	start_counter();
-	uint64_t start, prev, next;
+	uint64_t start, prev, next, difference;
 	start = get_counter();
 	prev = start;
+	i = 0, num_inact = 0;
 
-	for (i = 0; i < num; i++){
-		while(next = get_counter()){
-			if ((next - prev) > threshold){
-				printf("Active %d: start at %u, duration %u cycles (%u ms)\n", i, prev, next - prev, (next-prev)/CPUFREQ);
-			}
+	while(next = get_counter()){
+		difference = next - prev;
+		if (difference > threshold){
+			printf("Inactive %d: start at %lu, duration %lu cycles (%lu ms)\n", i, prev, difference, (unsigned long)difference/(unsigned long)CPUFREQ);
+			num_inact += 1;
+		} else {
+			printf("Active %d: start at, duration %lu cycles (%lu ms)\n", i, prev, difference, (unsigned long)difference/(unsigned long)CPUFREQ);
 		}
-
+		prev = next;
+		i ++;
+		if (num_inact >= num){
+			break;
+		}
 	}
+
 	return start;
 }
 
@@ -50,12 +58,12 @@ int main (int argc, char ** argv) {
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc > 3) { //change back to 2
+	if (argc > 2) {
 		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
 		exit(0);
 	}
 
-	threshold = 0;
+	threshold = 2300;
 	num = (argc == 2) ? atoi(argv[1]) : 1;
 
 	int microseconds;
@@ -70,12 +78,10 @@ int main (int argc, char ** argv) {
 		fprintf(stderr, "%s\n", "sched_setaffinity");
 
 	//getcpu frequency
-	while (1){
-		CPUFREQ = getcpu_freq(microseconds);
-		printf("%u Mhz\n", CPUFREQ/1000000);
-	}
+	CPUFREQ = getcpu_freq(microseconds);
+	printf("%u Mhz\n", CPUFREQ/1000000);
 
-	// inactive_periods(num, tmhreshold, samples);
+	inactive_periods(num, threshold, samples);
 
 	return 0;
 	

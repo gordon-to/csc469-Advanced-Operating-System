@@ -10,32 +10,37 @@ uint64_t CPUFREQ;
 
 uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
-	int i, num_inact;
+	int i;
 	start_counter();
-	uint64_t start, prev, next, difference, ms_time;
-	start = get_counter();
-	prev = start;
-	i = 0, num_inact = 0;
+	uint64_t start, prev, next, difference, summ, start_counter;
+	double ms_time;
+	char active;
+	active = 1;
+	difference = 0;
 
-	while(next = get_counter()){
-		difference = next - prev;
-		ms_time = difference/CPUFREQ;
-		if (difference > threshold){
-			printf("Inactive %d: start at %lu, duration %lu cycles (%lu ms)\n", i, prev, difference, ms_time);
-			samples[num_inact*2] = prev;
-			samples[num_inact*2+1] = next;
-			num_inact += 1;
-		} else {
-			printf("Active %d: start at, duration %lu cycles (%lu ms)\n", i, prev, difference, ms_time);
-		}
-		prev = next;
-		i ++;
-		if (num_inact >= num){
-			break;
+	for (i = 0; i < num*2; i++) {
+		summ = difference;
+		start = get_counter();
+		while(next = get_counter()) {
+			difference = next - prev;
+			ms_time = ((double) (difference * 100)/ (double) CPUFREQ);
+			if (difference > threshold && active){
+				printf("Active %d: start at, duration %lu cycles (%lu ms)\n", i, start, summ, ms_time);
+				samples[i] = start;
+				samples[i+1] = prev;
+				active = 0;
+				break;
+			} else if (difference < threshold && !active){
+				printf("Inactive %d: start at %lu, duration %lu cycles (%lu ms)\n", i, start, summ, ms_time);
+				active = 1;
+			} else {
+				summ += difference;
+			}
+			prev = next;
 		}
 	}
 
-	return start;
+	return samples[0];
 }
 
 uint64_t getcpu_freq(int microseconds){
@@ -85,12 +90,6 @@ int main (int argc, char ** argv) {
 	printf("%u Mhz\n", CPUFREQ/1000000);
 
 	inactive_periods(num, threshold, samples);
-
-	int i;
-	for (i = 0;i < num*2; i ++){
-		printf("%lu\n",samples[i]);
-	}
-
 	free(samples);
 	return 0;
 	

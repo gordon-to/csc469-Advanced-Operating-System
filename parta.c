@@ -12,18 +12,21 @@ uint64_t inactive_periods(int num, uint64_t threshold, uint64_t *samples){
 
 	int i, num_inact;
 	start_counter();
-	uint64_t start, prev, next, difference;
+	uint64_t start, prev, next, difference, ms_time;
 	start = get_counter();
 	prev = start;
 	i = 0, num_inact = 0;
 
 	while(next = get_counter()){
 		difference = next - prev;
+		ms_time = difference/CPUFREQ;
 		if (difference > threshold){
-			printf("Inactive %d: start at %lu, duration %lu cycles (%lu ms)\n", i, prev, difference, (unsigned long)difference/(unsigned long)CPUFREQ);
+			printf("Inactive %d: start at %lu, duration %lu cycles (%lu ms)\n", i, prev, difference, ms_time);
+			samples[num_inact*2] = prev;
+			samples[num_inact*2+1] = next;
 			num_inact += 1;
 		} else {
-			printf("Active %d: start at, duration %lu cycles (%lu ms)\n", i, prev, difference, (unsigned long)difference/(unsigned long)CPUFREQ);
+			printf("Active %d: start at, duration %lu cycles (%lu ms)\n", i, prev, difference, ms_time);
 		}
 		prev = next;
 		i ++;
@@ -58,13 +61,13 @@ int main (int argc, char ** argv) {
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc > 2) {
-		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
+	if (argc != 2) {
+		fprintf(stderr, "%s\n", "Usage: parta num");
 		exit(0);
 	}
 
 	threshold = 2300;
-	num = (argc == 2) ? atoi(argv[1]) : 1;
+	num = atoi(argv[1]);
 
 	int microseconds;
 	microseconds = 100000;
@@ -83,6 +86,12 @@ int main (int argc, char ** argv) {
 
 	inactive_periods(num, threshold, samples);
 
+	int i;
+	for (i = 0;i < num*2; i ++){
+		printf("%lu\n",samples[i]);
+	}
+
+	free(samples);
 	return 0;
 	
 }

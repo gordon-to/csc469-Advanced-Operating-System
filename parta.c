@@ -50,7 +50,7 @@ int main (int argc, char ** argv) {
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc > 2) {
+	if (argc > 3) { //change back to 2
 		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
 		exit(0);
 	}
@@ -70,8 +70,10 @@ int main (int argc, char ** argv) {
 		fprintf(stderr, "%s\n", "sched_setaffinity");
 
 	//getcpu frequency
-	CPUFREQ = getcpu_freq(microseconds);
-	
+	while (1){
+		CPUFREQ = getcpu_freq(microseconds);
+		printf("%u Mhz\n", CPUFREQ/1000000);
+	}
 
 	// inactive_periods(num, tmhreshold, samples);
 

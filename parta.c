@@ -33,7 +33,7 @@ uint64_t getcpu_freq(int microseconds){
 	start_counter();
 	uint64_t prev;
 	uint64_t sum = 0;
-	cpu_k_polls = 1000;
+	cpu_k_polls = 10;
 	for(i=0;i<cpu_k_polls;i++){
 		prev = get_counter();
 		usleep(microseconds);
@@ -50,7 +50,7 @@ int main (int argc, char ** argv) {
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc > 3) { //change back to 2
+	if (argc > 2) {
 		fprintf(stderr, "%s\n", "Usage parta (optional) <num>");
 		exit(0);
 	}
@@ -59,7 +59,7 @@ int main (int argc, char ** argv) {
 	num = (argc == 2) ? atoi(argv[1]) : 1;
 
 	int microseconds;
-	microseconds = (argc == 3) ? atoi(argv[2]) : 1000;
+	microseconds = 100000;
 
 	samples = malloc(sizeof(uint64_t) * num * 2);
 
@@ -70,10 +70,8 @@ int main (int argc, char ** argv) {
 		fprintf(stderr, "%s\n", "sched_setaffinity");
 
 	//getcpu frequency
-	while (1){
-		CPUFREQ = getcpu_freq(microseconds);
-		printf("%u Mhz\n", CPUFREQ/1000000);
-	}
+	CPUFREQ = getcpu_freq(microseconds);
+	
 
 	// inactive_periods(num, tmhreshold, samples);
 

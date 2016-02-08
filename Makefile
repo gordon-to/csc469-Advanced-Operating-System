@@ -3,7 +3,7 @@ CC = gcc
 CC_FLAGS = -w -g
 
 
-all: parta
+all: tsc.o parta
 
 parta: parta.c
 	gcc $< $(CC_FLAGS) tsc.o -o parta 

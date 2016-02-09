@@ -1,5 +1,5 @@
-import sys, subprocess
+import sys, subprocess as sp
 
-commmand = ["numactl", "--membind", "0", "--physcpubind",  "36", "mccalpin-stream" ]
-p = subprocess.check_output(command, shell=True)
+command = ["numactl", "--membind", "0", "--physcpubind",  "36", "mccalpin-stream" ]
+p = sp.check_output(command)
 print(p)

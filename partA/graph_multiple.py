@@ -4,6 +4,7 @@
 
 micro = [[0] for x in range(2)]		# used to contain every active/inactive time period
 macro = [[0] for x in range(2)]		# used to contain only large active/inactive time periods
+time = []
 
 for i in range(2):
 	micro[i].remove(0)		# Remove that initial 0
@@ -36,9 +37,12 @@ for i in range(2):
 	
 	results.close()
 
-print micro
-print macro
-# compare the beginning long durations to see which one started first
+# print micro
+print macro[0]
+print macro[1]
+
+print (time[0], time[1])
+
 
 # also calculate the extra overhead in inactive times
 

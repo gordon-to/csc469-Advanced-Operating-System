@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <sched.h>
 
 uint64_t CPUFREQ;
@@ -63,18 +64,24 @@ uint64_t getcpu_freq(int microseconds){
 
 int main (int argc, char ** argv) {
 
-	int num;
+	int num = 0;
 	cpu_set_t cpuset;
 	uint64_t threshold;
 	uint64_t *samples;
 
-	if (argc != 2) {
-		fprintf(stderr, "%s\n", "Usage: parta num");
+	if (argc != 2 && argc != 3) {
+		fprintf(stderr, "%s\n", "Usage:\nparta <num>\nparta --contextswitch <num>");
 		exit(0);
 	}
-
+	char contextswitch = 0;
+	int contextswitch_k_polls = 1;
+	if (strcmp(argv[1], "--contextswitch") == 0){
+		contextswitch = 1;
+		if (argc == 3){
+			contextswitch_k_polls = atoi(argv[2]);
+		}
+	} else 	num = atoi(argv[1]);
 	threshold = 2300;
-	num = atoi(argv[1]);
 
 	int microseconds;
 	microseconds = 100000;
@@ -91,7 +98,26 @@ int main (int argc, char ** argv) {
 	CPUFREQ = getcpu_freq(microseconds);
 	printf("%u mHz\n", CPUFREQ/1000000);
 
-	inactive_periods(num, threshold, samples);
+
+	int i;
+	if (contextswitch){
+		start_counter();
+		int pid = fork();
+		if (pid == 0){
+			//child process
+			for(i=0; i < contextswitch_k_polls; i++){
+				printf("Child: %lu\n", get_counter());
+				sleep(1);
+			}
+
+		} else {
+			for(i=0; i < contextswitch_k_polls; i++){
+				printf("Parent: %lu\n", get_counter());
+				sleep(1);
+			}
+		}
+	} else inactive_periods(num, threshold, samples);
+	
 	free(samples);
 	return 0;
 	

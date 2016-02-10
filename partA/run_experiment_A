@@ -1,5 +1,8 @@
 touch output.txt
-parta 10 > output.txt
+parta 30 > output.txt
 touch plot.gp
+touch plot10.gp
 python graphit.py
 gnuplot plot.gp
+python graphit.py 10
+gnuplot plot10.gp

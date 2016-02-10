@@ -41,8 +41,6 @@ for i in range(2):
 print macro[0]
 print macro[1]
 
-print (time[0], time[1])
-
 
 # also calculate the extra overhead in inactive times
 

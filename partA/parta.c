@@ -107,13 +107,13 @@ int main (int argc, char ** argv) {
 			//child process
 			for(i=0; i < contextswitch_k_polls; i++){
 				printf("Child: %lu\n", get_counter());
-				sleep(1);
+				sched_yield();
 			}
 
 		} else {
 			for(i=0; i < contextswitch_k_polls; i++){
 				printf("Parent: %lu\n", get_counter());
-				sleep(1);
+				sched_yield();
 			}
 		}
 	} else inactive_periods(num, threshold, samples);

@@ -1,6 +1,5 @@
-touch output1.txt
-touch output2.txt
-parta 30 > output1.txt & parta 30 > output2.txt
+touch output.txt
+parta --contextswitch 30 > output.txt
 touch plot_multi.gp
 python graph_multiple.py
 gnuplot plot_multi.gp

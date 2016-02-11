@@ -6,3 +6,4 @@ python graphit.py
 gnuplot plot.gp
 python graphit.py 10
 gnuplot plot10.gp
+echo "Graphs can be found in 'bars full.png' and 'bars zoomed.png.'"

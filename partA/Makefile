@@ -14,4 +14,4 @@ tsc.o: tsc.c
 
 # To remove generated files
 clean:
-	rm -f parta tsc.o
+	rm -f parta tsc.o *.png *.txt *.gp

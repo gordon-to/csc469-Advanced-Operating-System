@@ -1,6 +1,5 @@
 import sys, subprocess as sp, re
 import matplotlib.pyplot as plt
-
 command = ["numactl", "--membind", "0", "--physcpubind",  "0", "mccalpin-stream" ]
 
 copyv = []

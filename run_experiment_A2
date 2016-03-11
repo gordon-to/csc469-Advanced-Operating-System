@@ -1,2 +1,0 @@
-touch output2.txt
-parta --contextswitch 20 > output2.txt

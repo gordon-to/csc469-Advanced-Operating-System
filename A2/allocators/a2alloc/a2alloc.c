@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include "memlib.h"
 #include "malloc.h"
+#include "mm_thread.h"
 
 name_t myname = {
 	/* team name to be displayed on webpage */
@@ -46,6 +47,10 @@ typedef struct {
 	sb_meta* meta_first;		// Pointer to the first superblock meta object
 	sb_meta* bin_first[];		// Array of pointers to first superblock in each bin
 } heap;
+
+// pointer to hold all heaps
+heap ** heap_pointer;
+
 
 
 /*******************************
@@ -95,6 +100,20 @@ void mm_free(void *ptr) {
 
 
 int mm_init(void) {
+
+	if (!mem_init()) {
+		int num_cpu = getNumProcessors();
+		heap heap_table[num_cpu];
+		*heap_pointer = heap_table;
+		heap *curr_heap;
+		int i;
+		for (i = 0; i < num_cpu; i++) {
+			curr_heap = heap_table + i;
+			void * new_sb = mem_sbrk(SUPERBLOCK_SIZE);
+			//need to create new sb_meta for each
+			pthread_mutex_init(&curr_heap->lock, NULL);
+		}
+	}
 	// use mem_init to initialize
 	// create an array containing a heap for each thread
 	// for each heap

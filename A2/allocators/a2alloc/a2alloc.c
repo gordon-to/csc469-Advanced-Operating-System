@@ -21,12 +21,12 @@ name_t myname = {
 *******************************/
 
 // Block sizes
-#define SUPERBLOCK_SIZE = 4096;					// super block size (S)
+#define SUPERBLOCK_SIZE 4096;					// super block size (S)
 static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 
 // Fullness binning
-#define FULLNESS_DENOMINATOR = 4;				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
-#define NUM_BINS = FULLNESS_DENOMINATOR + 2;	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
+#define FULLNESS_DENOMINATOR 4;				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
+#define NUM_BINS FULLNESS_DENOMINATOR + 2;	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
 
 // Typedefs for all the necessary memory objects
 typedef unsigned long vaddr_t;

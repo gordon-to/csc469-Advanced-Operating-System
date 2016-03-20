@@ -113,14 +113,7 @@ int find_block(char* block_map, size_t block_size) {
 	return -1;
 }
 
-/****** MALLOC FUNCTIONS ******/
-void *mm_malloc(size_t sz) {
-	if(sz > SB_SIZE / 2) {
-		// Request size is too large, fall back to generic allocation
-		return malloc_large(sz);
-	}
-	
-	int tid = getTID();
+int get_cpuid(int tid) {
 	int cpu_id = -1;
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
@@ -134,10 +127,22 @@ void *mm_malloc(size_t sz) {
 				break;
 			}
 		}
-		if (cpu_id < 0) {
-			perror("Unable to get CPUID");
-		}
 	}
+	if (cpu_id < 0) {
+		perror("Unable to get CPUID");
+	}
+	return cpu_id;
+}
+
+/****** MALLOC FUNCTIONS ******/
+void *mm_malloc(size_t sz) {
+	if(sz > SB_SIZE / 2) {
+		// Request size is too large, fall back to generic allocation
+		return malloc_large(sz);
+	}
+	
+	int tid = getTID();
+	int cpu_id = get_cpuid(tid);
 	int j;
 	superblock* target_sb = NULL;
 	char use_first = 0;

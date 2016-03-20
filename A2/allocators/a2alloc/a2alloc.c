@@ -27,14 +27,14 @@ static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 
 // Fullness binning
 #define FULLNESS_DENOMINATOR 4				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
-#define NUM_BINS FULLNESS_DENOMINATOR + 2	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full 
+#define NUM_BINS FULLNESS_DENOMINATOR + 2	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
 
 // Typedefs for all the necessary memory objects
 typedef unsigned long vaddr_t;
 
 typedef struct {
 	size_t block_size;			// Block size class (b)
-	char block_map[8];			// 512-bit char bitmap indicating which blocks are being used
+	char block_map[64];			// 512-bit char bitmap indicating which blocks are being used
 	int used_blocks;			// A count of the currently used blocks (for fullness)
 	void* prev;					// Pointer to previous meta block
 	void* next;					// Pointer to next meta block
@@ -51,7 +51,8 @@ heap * heap_table;
 /*******************************
 	FUNCTIONS START
 *******************************/
-void *malloc_large() {
+void *malloc_large(size_t sz) {
+	(void)sz;
 	return NULL;
 }
 
@@ -76,18 +77,93 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 	return NULL;
 }
 
+/* Given a superblock's non-full block_map, look for a free block */
+int find_block(char* block_map, size_t block_size) {
+	// Need to be careful with block_size > 512
+	float num_chars = float(SB_SIZE) / (block_size * 8f);
+	
+	if(num_chars < 1) {
+		// block_size was >512, therefore only check the first few bits
+		for(k = 0; k < 8 * num_chars; k++) {
+			if(!block_map[0] % pow(2, k)) {
+				// Block at bit k is free
+				return k;
+			}
+		}
+	}
+	
+	// Else, iterate through as many block_maps as necessary
+	for(j = 0; j < num_chars; j++) {
+		if(block_map[j] < 256) {
+			int k;
+			
+			for(k = 0; k < 8; k++) {
+				if(!block_map[j] % pow(2, k)) {
+					// Block at bit k is free
+					return j * 8 + k;
+				}
+			}
+		}
+	}
+	
+	// If we somehow fell out of all of that, means that block_map is full
+	return -1
+}
 
 /****** MALLOC FUNCTIONS ******/
 void *mm_malloc(size_t sz) {
-	(void)sz; /* Avoid warning about unused variable */
+	if(sz > SB_SIZE / 2) {
+		// Request size is too large, fall back to generic allocation
+		return malloc_large(sz);
+	}
 	
-	// if sz > S/2
-		// use malloc_large()
+	int i = getTID();
+	int j;
+	superblock* target_sb;
+	bool use_first = false;
+	size_t size_class;
 	
-	// i = thread_id
-	// lock heap i
-	// find a fairly full superblock that can fit request size (will usually be bin 5)
-		// can do this by iterating down from bin 5 to 0
+	// Get size class
+	for(j = 0; j < 9; j++) {
+		if(sz <= block_sizes[j]) {
+			size_class = block_sizes[j];
+		}
+	}
+	// pthread_mutex_lock(&heap_pointer[i+1]->lock);
+	
+	// Find a fairly full superblock that can fit request size (usually bin 5)
+	for(j = NUM_BINS - 1; j >= 0; j--) {
+		superblock* sb = heap_pointer[i+1]->bin_first[j];
+		
+		// Searching bin for superblock with space
+		while(sb) {
+			if(size_class == sb.block_size) {
+				// Special case check for first block (shared with metadata)
+				int cant_use_first = 0;
+				if(sz > size_class - sizeof(superblock) &&
+													!(sb.block_map[0] % 2)) {
+					cant_use_first = 1;
+				} else {
+					use_first = true;
+					target_sb = sb;
+					break;
+				}
+				
+				// Now do normal check
+				if(sb.used_blocks + cant_use_first < SB_SIZE / sb.block_size) {
+					// Found a superblock with space
+					target_sb = sb;
+					break;
+				}
+			}
+			
+			sb = sb.next;
+		}
+		
+		if(target_sb) {
+			break;
+		}
+	}
 	
 	// if there's no space
 		// check heap 0's bin 0 (empty bin)
@@ -100,12 +176,25 @@ void *mm_malloc(size_t sz) {
 		// set the superblock as heap i's bin_first[0]
 		// remember to adjust the pointer for the former bin_first
 		
+	// Now that we have our superblock, get a free block
+	void* block;
+	if(use_first) {
+		// Special case for first block
+		&block = &target_sb + sizeof(superblock);
+		target_sb.block_map[0]++;
+		target_sb.used_blocks++;
+	} else {
+		// Check the block_maps for free blocks
+		int block_id = find_block(target_sb.block_map, size_class);
+		&block = &target_sb + block_id * size_class;
+		
+		// Change block map and used_blocks
+		target_sb.block_map[block_id/8] += pow(2, block_id % 8);
+		target_sb.used_blocks++;
+	}
 	
-	// unlock heap i
-	// change block_map and used_blocks accordinly and
-	// return one of the free blocks
-	
-	return NULL;
+	// pthread_mutex_unlock(&heap_pointer[i+1]->lock);
+	return block;
 }
 
 void mm_free(void *ptr) {

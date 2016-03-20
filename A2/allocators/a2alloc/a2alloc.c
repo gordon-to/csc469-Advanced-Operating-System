@@ -27,7 +27,7 @@ static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 
 // Fullness binning
 #define FULLNESS_DENOMINATOR 4				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
-#define NUM_BINS FULLNESS_DENOMINATOR + 2	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
+#define NUM_BINS FULLNESS_DENOMINATOR + 2	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full 
 
 // Typedefs for all the necessary memory objects
 typedef unsigned long vaddr_t;
@@ -47,8 +47,6 @@ typedef struct {
 
 // pointer to hold all heaps
 heap ** heap_pointer;
-
-
 
 /*******************************
 	FUNCTIONS START
@@ -134,14 +132,12 @@ int mm_init(void) {
 		// global heap
 		curr_heap = heap_table;
 		pthread_mutex_init(&curr_heap->lock, NULL);
-		*curr_heap->bin_first = (superblock *) dseg_lo;
 		// every other heap
 		int i;
 		for (i = 0; i < num_cpu; i++) {
 			curr_heap = heap_table + i + 1;
 			void * new_sb = mem_sbrk(SB_SIZE);
 			init_sb_meta((superblock *) new_sb);
-			*curr_heap->bin_first = ((superblock *) new_sb);
 		}
 
 	}

@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+#include <sched.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -146,11 +148,11 @@ void *mm_malloc(size_t sz) {
 			size_class = block_sizes[j];
 		}
 	}
-	// pthread_mutex_lock(&heap_pointer[i+1]->lock);
+	// pthread_mutex_lock(&heap_table[cpu_id+1].lock);
 	
 	// Find a fairly full superblock that can fit request size (usually bin 5)
 	for(j = NUM_BINS - 1; j >= 0; j--) {
-		superblock* sb = heap_pointer[cpu_id+1]->bin_first[j];
+		superblock* sb = heap_table[cpu_id+1].bin_first[j];
 		
 		// Searching bin for superblock with space
 		while(sb) {
@@ -212,7 +214,7 @@ void *mm_malloc(size_t sz) {
 		target_sb->used_blocks++;
 	}
 	
-	// pthread_mutex_unlock(&heap_pointer[i+1]->lock);
+	// pthread_mutex_unlock(&heap_table[cpu_id+1].lock);
 	return block;
 }
 
@@ -240,7 +242,7 @@ int mm_init(void) {
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
-			curr_heap->bin_first = bin_start + (i * NUM_BINS);
+			curr_heap->bin_first[0] = bin_start + (i * NUM_BINS);
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first, 0, sizeof(superblock *) * num_cpu);
 		}

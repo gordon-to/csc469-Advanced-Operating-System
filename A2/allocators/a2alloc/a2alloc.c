@@ -46,7 +46,7 @@ typedef struct {
 } heap;
 
 // pointer to hold all heaps
-heap ** heap_pointer;
+heap * heap_table;
 
 /*******************************
 	FUNCTIONS START
@@ -114,7 +114,7 @@ void mm_free(void *ptr) {
 
 void init_sb_meta(superblock* new_sb_meta) {
 	new_sb_meta->block_size = SB_SIZE - sizeof(superblock);
-	mem_set(new_sb_meta->block_map, 0, 64);
+	mem_set(&new_sb_meta->block_map, 0, 64);
 	new_sb_meta->used_blocks = 0;
 	new_sb_meta->prev = NULL;
 	new_sb_meta->next = NULL;
@@ -126,20 +126,14 @@ int mm_init(void) {
 	if (!mem_init()) {
 		// need to reflect changes in this code (from metadata struct design to embedded metadata design)
 		int num_cpu = getNumProcessors();
-		heap heap_table[num_cpu+1];
-		*heap_pointer = heap_table;
-		heap *curr_heap;
-		// global heap
-		curr_heap = heap_table;
-		pthread_mutex_init(&curr_heap->lock, NULL);
-		// every other heap
+		heap_table = (heap *) dseg_lo;
+		heap* curr_heap;
 		int i;
-		for (i = 0; i < num_cpu; i++) {
-			curr_heap = heap_table + i + 1;
-			void * new_sb = mem_sbrk(SB_SIZE);
-			init_sb_meta((superblock *) new_sb);
+		for (i = 0; i <= num_cpu; i++) {
+			curr_heap = heap_table + i;
+			pthread_mutex_init(&curr_heap->lock, NULL);
+			mem_set(&curr_heap->bin_first, NULL, sizeof(superblock *) * num_cpu);
 		}
-
 	}
 	// use mem_init to initialize
 	// create an array containing a heap for each thread

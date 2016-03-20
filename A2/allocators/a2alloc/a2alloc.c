@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "memlib.h"
 #include "malloc.h"
 #include "mm_thread.h"
@@ -80,12 +81,13 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 /* Given a superblock's non-full block_map, look for a free block */
 int find_block(char* block_map, size_t block_size) {
 	// Need to be careful with block_size > 512
-	float num_chars = float(SB_SIZE) / (block_size * 8f);
+	float num_chars = (float)SB_SIZE / (block_size * 8.f);
+	int j, k;
 	
 	if(num_chars < 1) {
 		// block_size was >512, therefore only check the first few bits
 		for(k = 0; k < 8 * num_chars; k++) {
-			if(!block_map[0] % pow(2, k)) {
+			if(!block_map[0] % (int)pow(2, k)) {
 				// Block at bit k is free
 				return k;
 			}
@@ -95,10 +97,8 @@ int find_block(char* block_map, size_t block_size) {
 	// Else, iterate through as many block_maps as necessary
 	for(j = 0; j < num_chars; j++) {
 		if(block_map[j] < 256) {
-			int k;
-			
 			for(k = 0; k < 8; k++) {
-				if(!block_map[j] % pow(2, k)) {
+				if(!block_map[j] % (int)pow(2, k)) {
 					// Block at bit k is free
 					return j * 8 + k;
 				}
@@ -107,7 +107,7 @@ int find_block(char* block_map, size_t block_size) {
 	}
 	
 	// If we somehow fell out of all of that, means that block_map is full
-	return -1
+	return -1;
 }
 
 /****** MALLOC FUNCTIONS ******/
@@ -120,7 +120,7 @@ void *mm_malloc(size_t sz) {
 	int i = getTID();
 	int j;
 	superblock* target_sb;
-	bool use_first = false;
+	char use_first = 0;
 	size_t size_class;
 	
 	// Get size class
@@ -144,7 +144,7 @@ void *mm_malloc(size_t sz) {
 													!(sb.block_map[0] % 2)) {
 					cant_use_first = 1;
 				} else {
-					use_first = true;
+					use_first = 1;
 					target_sb = sb;
 					break;
 				}

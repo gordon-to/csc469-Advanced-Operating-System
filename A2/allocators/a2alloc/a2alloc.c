@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "memlib.h"
 #include "malloc.h"
 #include "mm_thread.h"
@@ -21,12 +22,12 @@ name_t myname = {
 *******************************/
 
 // Block sizes
-#define SUPERBLOCK_SIZE 4096;					// super block size (S)
+#define SB_SIZE 4096					// super block size (S)
 static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 
 // Fullness binning
-#define FULLNESS_DENOMINATOR 4;				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
-#define NUM_BINS FULLNESS_DENOMINATOR + 2;	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
+#define FULLNESS_DENOMINATOR 4				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
+#define NUM_BINS FULLNESS_DENOMINATOR + 2	// Empty, 1-25%, 26-50%, 51-75%, 76-99%, Full
 
 // Typedefs for all the necessary memory objects
 typedef unsigned long vaddr_t;
@@ -114,7 +115,7 @@ void mm_free(void *ptr) {
 }
 
 void init_sb_meta(superblock* new_sb_meta) {
-	new_sb_meta->block_size = SUPERBLOCK_SIZE - sizeof(superblock);
+	new_sb_meta->block_size = SB_SIZE - sizeof(superblock);
 	mem_set(new_sb_meta->block_map, 0, 64);
 	new_sb_meta->used_blocks = 0;
 	new_sb_meta->prev = NULL;
@@ -133,14 +134,14 @@ int mm_init(void) {
 		// global heap
 		curr_heap = heap_table;
 		pthread_mutex_init(&curr_heap->lock, NULL);
-		curr_heap->bin_first = dseg_lo;
+		*curr_heap->bin_first = (superblock *) dseg_lo;
 		// every other heap
 		int i;
 		for (i = 0; i < num_cpu; i++) {
 			curr_heap = heap_table + i + 1;
-			void * new_sb = mem_sbrk(SUPERBLOCK_SIZE);
+			void * new_sb = mem_sbrk(SB_SIZE);
 			init_sb_meta((superblock *) new_sb);
-			curr_heap->bin_first = new_sb;
+			*curr_heap->bin_first = ((superblock *) new_sb);
 		}
 
 	}

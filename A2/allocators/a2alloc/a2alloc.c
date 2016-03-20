@@ -50,13 +50,34 @@ typedef struct {
 
 // pointer to hold all heaps
 heap * heap_table;
+void * large_malloc_table;
 
 /*******************************
 	FUNCTIONS START
 *******************************/
-void *malloc_large(size_t sz) {
-	(void)sz;
-	return NULL;
+void *malloc_large(size_t sz, int cpu_id) {
+
+	vaddr_t * tmp;
+	void * lm;
+	int pg_size = mem_pagesize();
+	vaddr_t * lm_cpu = large_malloc_table + cpu_id;
+	void * last_block = (void *) *lm_cpu;
+	if ((void *) lm_cpu == NULL) {
+		lm = mem_sbrk(pg_size);
+		tmp = large_malloc_table + cpu_id;
+		*tmp = (vaddr_t) lm;
+		memset((void *) (lm + pg_size - sizeof(void *)), 0, sizeof(void *));
+	} else {
+		while (*((vaddr_t *) (last_block + pg_size - sizeof(void *))) != 0) {
+			last_block = (void *) *((vaddr_t *) (last_block + pg_size - sizeof(void *)));
+		}
+		lm = mem_sbrk(pg_size);
+		tmp = (vaddr_t *) (last_block + pg_size - sizeof(void *));
+		*tmp = (vaddr_t) lm;
+		last_block = (void *) *tmp;
+	}
+
+	return last_block;
 }
 
 /* Creates a superblock at the given address and returns the pointer to it. */
@@ -113,6 +134,8 @@ int find_block(char* block_map, size_t block_size) {
 	return -1;
 }
 
+
+
 int get_cpuid(int tid) {
 	int cpu_id = -1;
 	cpu_set_t mask;
@@ -136,13 +159,13 @@ int get_cpuid(int tid) {
 
 /****** MALLOC FUNCTIONS ******/
 void *mm_malloc(size_t sz) {
-	if(sz > SB_SIZE / 2) {
-		// Request size is too large, fall back to generic allocation
-		return malloc_large(sz);
-	}
-	
 	int tid = getTID();
 	int cpu_id = get_cpuid(tid);
+	if(sz > SB_SIZE / 2) {
+		// Request size is too large, fall back to generic allocation
+		return malloc_large(sz, cpu_id);
+	}
+	
 	int j;
 	superblock* target_sb = NULL;
 	char use_first = 0;
@@ -252,6 +275,9 @@ int mm_init(void) {
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
+		large_malloc_table = bin_start + ((num_cpu+1) * NUM_BINS);
+		memset(large_malloc_table, 0, sizeof(void*) * num_cpu);
+
 	}
 	// use mem_init to initialize
 	// create an array containing a heap for each thread
@@ -260,7 +286,7 @@ int mm_init(void) {
 	
 	// consider having a bin for each block size * NUM_BINS
 	
-	// we should now have 9 heaps, each with empty bins and a pointer to their first metablock
+	// we should now have 9 heaps, each with emptyins and a pointer to their first metablock
 	
 	return 0;
 }

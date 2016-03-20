@@ -44,6 +44,7 @@ typedef struct {
 } superblock;
 
 typedef struct {
+	int num_pages;
 	void * next;
 } node;
 
@@ -70,8 +71,9 @@ void *malloc_large(size_t sz, int cpu_id) {
 
 	void * tmp = mem_sbrk(num_pages * pg_size);	
 	lm_cpu->next = tmp;
+	lm_cpu->num_pages = num_pages;
 
-	return lm_cpu->next;
+	return (lm_cpu->next + sizeof(node));
 }
 
 /* Creates a superblock at the given address and returns the pointer to it. */

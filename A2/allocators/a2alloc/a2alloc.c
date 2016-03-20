@@ -68,7 +68,7 @@ void *malloc_large(size_t sz, int cpu_id) {
 		lm_cpu = lm_cpu->next;
 	}
 
-	void * tmp = mem_sbrk(num_pages);	
+	void * tmp = mem_sbrk(num_pages * pg_size);	
 	lm_cpu->next = tmp;
 
 	return lm_cpu->next;

@@ -72,6 +72,7 @@ void *malloc_large(size_t sz, int cpu_id) {
 			last_block = (void *) *((vaddr_t *) (last_block + pg_size - sizeof(void *)));
 		}
 		lm = mem_sbrk(pg_size);
+		memset((void *) (lm + pg_size - sizeof(void *)), 0, sizeof(void *));
 		tmp = (vaddr_t *) (last_block + pg_size - sizeof(void *));
 		*tmp = (vaddr_t) lm;
 		last_block = (void *) *tmp;

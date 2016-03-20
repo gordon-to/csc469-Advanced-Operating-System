@@ -118,9 +118,25 @@ void *mm_malloc(size_t sz) {
 		return malloc_large(sz);
 	}
 	
-	int i = getTID();
+	int tid = getTID();
+	int cpu_id = 0;
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+	if (sched_getaffinity(tid, sizeof(cpu_set_t), &mask) != 0) {
+		perror("sched_getaffinity failed");
+	} else {
+		int i;
+		for (i = 0; i < getNumProcessors(); i ++){
+			if (CPU_ISSET(i, &mask)) {
+				cpu_id = i;
+			}
+		}
+		if (!cpu_id) {
+			perror("Unable to get CPUID");
+		}
+	}
 	int j;
-	superblock* target_sb;
+	superblock* target_sb = NULL;
 	char use_first = 0;
 	size_t size_class;
 	
@@ -134,7 +150,7 @@ void *mm_malloc(size_t sz) {
 	
 	// Find a fairly full superblock that can fit request size (usually bin 5)
 	for(j = NUM_BINS - 1; j >= 0; j--) {
-		superblock* sb = heap_pointer[i+1]->bin_first[j];
+		superblock* sb = heap_pointer[cpu_id+1]->bin_first[j];
 		
 		// Searching bin for superblock with space
 		while(sb) {

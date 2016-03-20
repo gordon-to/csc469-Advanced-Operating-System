@@ -44,6 +44,10 @@ typedef struct {
 } superblock;
 
 typedef struct {
+	void * next;
+} node;
+
+typedef struct {
 	pthread_mutex_t lock;
 	superblock* bin_first[];	// Array of pointers to first superblock in each bin
 } heap;
@@ -56,29 +60,18 @@ void * large_malloc_table;
 	FUNCTIONS START
 *******************************/
 void *malloc_large(size_t sz, int cpu_id) {
-
-	vaddr_t * tmp;
-	void * lm;
 	int pg_size = mem_pagesize();
-	vaddr_t * lm_cpu = large_malloc_table + cpu_id;
-	void * last_block = (void *) *lm_cpu;
-	if ((void *) lm_cpu == NULL) {
-		lm = mem_sbrk(pg_size);
-		tmp = large_malloc_table + cpu_id;
-		*tmp = (vaddr_t) lm;
-		memset((void *) (lm + pg_size - sizeof(void *)), 0, sizeof(void *));
-	} else {
-		while (*((vaddr_t *) (last_block + pg_size - sizeof(void *))) != 0) {
-			last_block = (void *) *((vaddr_t *) (last_block + pg_size - sizeof(void *)));
-		}
-		lm = mem_sbrk(pg_size);
-		memset((void *) (lm + pg_size - sizeof(void *)), 0, sizeof(void *));
-		tmp = (vaddr_t *) (last_block + pg_size - sizeof(void *));
-		*tmp = (vaddr_t) lm;
-		last_block = (void *) *tmp;
+	int num_pages = ceil((sz+ sizeof(node))/pg_size);
+	node * lm_cpu = large_malloc_table + cpu_id;
+
+	while (lm_cpu->next != NULL){
+		lm_cpu = lm_cpu->next;
 	}
 
-	return last_block;
+	void * tmp = mem_sbrk(num_pages);	
+	lm_cpu->next = tmp;
+
+	return lm_cpu->next;
 }
 
 /* Creates a superblock at the given address and returns the pointer to it. */
@@ -277,7 +270,7 @@ int mm_init(void) {
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
 		large_malloc_table = bin_start + ((num_cpu+1) * NUM_BINS);
-		memset(large_malloc_table, 0, sizeof(void*) * num_cpu);
+		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
 
 	}
 	// use mem_init to initialize

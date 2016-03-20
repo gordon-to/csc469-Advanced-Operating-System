@@ -75,6 +75,7 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 	// bytes smaller
 	
 	// tl;dr use the bullet point rules above
+
 	return NULL;
 }
 
@@ -219,11 +220,13 @@ int mm_init(void) {
 		int num_cpu = getNumProcessors();
 		heap_table = (heap *) dseg_lo;
 		heap* curr_heap;
+		superblock * bin_start = (superblock *) (heap_table + num_cpu);
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
+			curr_heap->bin_first = bin_start + (i * NUM_BINS);
 			pthread_mutex_init(&curr_heap->lock, NULL);
-			memset(&curr_heap->bin_first, 0, sizeof(superblock *) * num_cpu);
+			memset(curr_heap->bin_first, 0, sizeof(superblock *) * num_cpu);
 		}
 	}
 	// use mem_init to initialize

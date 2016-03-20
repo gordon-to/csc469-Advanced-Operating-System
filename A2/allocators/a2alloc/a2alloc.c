@@ -86,7 +86,7 @@ int find_block(char* block_map, size_t block_size) {
 	
 	if(num_chars < 1) {
 		// block_size was >512, therefore only check the first few bits
-		for(k = 0; k < 8 * num_chars; k++) {
+		for(k = 0; k < round(8 * num_chars); k++) {
 			if(!block_map[0] % (int)pow(2, k)) {
 				// Block at bit k is free
 				return k;
@@ -137,11 +137,11 @@ void *mm_malloc(size_t sz) {
 		
 		// Searching bin for superblock with space
 		while(sb) {
-			if(size_class == sb.block_size) {
+			if(size_class == sb->block_size) {
 				// Special case check for first block (shared with metadata)
 				int cant_use_first = 0;
 				if(sz > size_class - sizeof(superblock) &&
-													!(sb.block_map[0] % 2)) {
+													!(sb->block_map[0] % 2)) {
 					cant_use_first = 1;
 				} else {
 					use_first = 1;
@@ -150,14 +150,14 @@ void *mm_malloc(size_t sz) {
 				}
 				
 				// Now do normal check
-				if(sb.used_blocks + cant_use_first < SB_SIZE / sb.block_size) {
+				if(sb->used_blocks + cant_use_first < SB_SIZE / sb->block_size) {
 					// Found a superblock with space
 					target_sb = sb;
 					break;
 				}
 			}
 			
-			sb = sb.next;
+			sb = sb->next;
 		}
 		
 		if(target_sb) {
@@ -180,17 +180,19 @@ void *mm_malloc(size_t sz) {
 	void* block;
 	if(use_first) {
 		// Special case for first block
-		&block = &target_sb + sizeof(superblock);
-		target_sb.block_map[0]++;
-		target_sb.used_blocks++;
+		block = (char*)target_sb + sizeof(superblock);
+		target_sb->block_map[0]++;
+		target_sb->used_blocks++;
 	} else {
 		// Check the block_maps for free blocks
-		int block_id = find_block(target_sb.block_map, size_class);
-		&block = &target_sb + block_id * size_class;
+		int block_id = find_block(target_sb->block_map, size_class);
+		block = (char*)target_sb + block_id * size_class;
+		// printf("target_sb + (block_id * size_class) = block\n");
+		// printf("%p + %d = %p\n", target_sb, block_id * size_class, block);
 		
 		// Change block map and used_blocks
-		target_sb.block_map[block_id/8] += pow(2, block_id % 8);
-		target_sb.used_blocks++;
+		target_sb->block_map[block_id/8] += pow(2, block_id % 8);
+		target_sb->used_blocks++;
 	}
 	
 	// pthread_mutex_unlock(&heap_pointer[i+1]->lock);
@@ -203,7 +205,7 @@ void mm_free(void *ptr) {
 
 void init_sb_meta(superblock* new_sb_meta) {
 	new_sb_meta->block_size = SB_SIZE - sizeof(superblock);
-	mem_set(&new_sb_meta->block_map, 0, 64);
+	memset(&new_sb_meta->block_map, 0, 64);
 	new_sb_meta->used_blocks = 0;
 	new_sb_meta->prev = NULL;
 	new_sb_meta->next = NULL;
@@ -221,7 +223,7 @@ int mm_init(void) {
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
 			pthread_mutex_init(&curr_heap->lock, NULL);
-			mem_set(&curr_heap->bin_first, NULL, sizeof(superblock *) * num_cpu);
+			memset(&curr_heap->bin_first, 0, sizeof(superblock *) * num_cpu);
 		}
 	}
 	// use mem_init to initialize

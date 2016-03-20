@@ -121,7 +121,7 @@ void *mm_malloc(size_t sz) {
 	}
 	
 	int tid = getTID();
-	int cpu_id = 0;
+	int cpu_id = -1;
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
 	if (sched_getaffinity(tid, sizeof(cpu_set_t), &mask) != 0) {
@@ -131,9 +131,10 @@ void *mm_malloc(size_t sz) {
 		for (i = 0; i < getNumProcessors(); i ++){
 			if (CPU_ISSET(i, &mask)) {
 				cpu_id = i;
+				break;
 			}
 		}
-		if (!cpu_id) {
+		if (cpu_id < 0) {
 			perror("Unable to get CPUID");
 		}
 	}
@@ -244,7 +245,7 @@ int mm_init(void) {
 			curr_heap = heap_table + i;
 			curr_heap->bin_first[0] = bin_start + (i * NUM_BINS);
 			pthread_mutex_init(&curr_heap->lock, NULL);
-			memset(curr_heap->bin_first, 0, sizeof(superblock *) * num_cpu);
+			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
 	}
 	// use mem_init to initialize

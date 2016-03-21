@@ -304,6 +304,8 @@ void *mm_malloc(size_t sz) {
 		// check heap 0's bin 1 for size_id (25% bin)
 		if(!target_sb && heap_table[0].bin_first[size_id][1]) {
 			target_sb = heap_table[0].bin_first[size_id][1];
+			heap_table[0].used -= target_sb->used_blocks * size_class;
+			heap_table[cpu_id+1].used += target_sb->used_blocks * size_class;
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 1;
@@ -321,6 +323,7 @@ void *mm_malloc(size_t sz) {
 			target_sb = new_superblock(tmp, size_class);
 			// For compatibility, we'll slot it into the global heap temporarily
 			heap_table[0].bin_first[size_class][0] = target_sb;
+			heap_table[0].allocated += SB_SIZE;
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 0;
@@ -329,6 +332,7 @@ void *mm_malloc(size_t sz) {
 		// Move the superblock to the appropriate heap's bin_first
 		int destination[3] = {cpu_id+1, size_id, 1};
 		transfer_bins(target_sb, origin, destination);
+		heap_table[0].allocated -= SB_SIZE;
 		heap_table[cpu_id+1].allocated += SB_SIZE;
 		old_fullness = 1;
 		pthread_mutex_unlock(&heap_table[0].lock);

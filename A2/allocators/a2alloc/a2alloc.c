@@ -253,7 +253,7 @@ void init_sb_meta(superblock* new_sb_meta) {
 
 
 // return 1 if freed, else 0
-int free_large_malloc(void *ptr, int cpu_id) {
+int free_large(void *ptr, int cpu_id) {
 
 	node * lm_cpu = large_malloc_table + cpu_id;
 	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
@@ -280,7 +280,7 @@ int free_large_malloc(void *ptr, int cpu_id) {
 void mm_free(void *ptr) {
 
 	int cpu_id = get_cpuid();
-	if (free_large_malloc(ptr, cpu_id)) return;
+	if (free_large(ptr, cpu_id)) return;
 
 
 	(void)ptr; /* Avoid warning about unused variable */

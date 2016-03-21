@@ -25,7 +25,8 @@ name_t myname = {
 *******************************/
 
 // Block sizes
-#define SB_SIZE 4096					// super block size (S)
+#define SB_SIZE 4096						// super block size (S)
+#define K 8									// Minimum superblock threshold (K)
 static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 
 // Fullness binning
@@ -56,6 +57,8 @@ typedef struct {
 	// 2D Array of pointers to first superblock in each bin
 	// The first range specifies block size class (the ones from 8 - 2048)
 	// The second range specifies fullness (from 0 - 100%)
+	int allocated;				// Space allocated to the heap in bytes
+	int used;					// Space used within the heap in bytes
 	superblock* bin_first[9][NUM_BINS];
 } heap;
 
@@ -326,6 +329,7 @@ void *mm_malloc(size_t sz) {
 		// Move the superblock to the appropriate heap's bin_first
 		int destination[3] = {cpu_id+1, size_id, 1};
 		transfer_bins(target_sb, origin, destination);
+		heap_table[cpu_id+1].allocated += SB_SIZE;
 		old_fullness = 1;
 		pthread_mutex_unlock(&heap_table[0].lock);
 	}
@@ -336,7 +340,6 @@ void *mm_malloc(size_t sz) {
 		// Special case for first block
 		block = (char*)target_sb + sizeof(superblock);
 		target_sb->block_map[0]++;
-		target_sb->used_blocks++;
 	} else {
 		// Check the block_maps for free blocks
 		int block_id = find_block(target_sb->block_map, size_class);
@@ -346,15 +349,16 @@ void *mm_malloc(size_t sz) {
 		
 		// Change block map and used_blocks
 		target_sb->block_map[block_id/8] += pow(2, block_id % 8);
-		target_sb->used_blocks++;
 	}
+	target_sb->used_blocks++;
+	heap_table[cpu_id+1].used += size_class;
 	
 	// If the bin has changed fullness, we'll need to move it accordingly
 	float new_percent = target_sb->used_blocks / (SB_SIZE / size_class);
 	int new_fullness = (int)(new_percent * FULLNESS_DENOMINATOR) + 1;
 	if(new_fullness != old_fullness) {
-		int origin[3] = {cpu_id+1, size_class, old_fullness};
-		int destination[3] = {cpu_id+1, size_class, new_fullness};
+		int origin[3] = {cpu_id+1, size_id, old_fullness};
+		int destination[3] = {cpu_id+1, size_id, new_fullness};
 		transfer_bins(target_sb, origin, destination);
 	}
 	
@@ -366,16 +370,29 @@ void mm_free(void *ptr) {
 	int cpu_id = get_cpuid();
 	
 	// Move up to page border to read header data
-	int* page = (int*)((unsigned long)ptr - ((unsigned long)ptr % mem_pagesize()));
-	int type = *page;
-	if (free_large(ptr, cpu_id)) return;
-
-
-	(void)ptr; /* Avoid warning about unused variable */
+	void* page = (int*)((unsigned long)ptr - ((unsigned long)ptr % mem_pagesize()));
+	int type = *(int*)page;
+	
+	// Freeing for large blocks
+	if(type) {
+		if (free_large(ptr, cpu_id)) return;
+	}
+	
+	// Get the superblock data and deallocate it fro the superblock
+	superblock* sb = (superblock*)page;
+	
+	// u[i] -= block_size
+	// sb->used_blocks--;
+	// update block_map;
+	
+	// Update fullness bins
+	// if(u[i] < a[i] - K * S and u[i] < a[i] / FULLNESS_DENOMINATOR)
+		// transfer an empty one to global heap
+	
 }
 
 int mm_init(void) {
-	printf("sizeof(superblock) = %d", (int)sizeof(superblock));		// debug
+	printf("sizeof(superblock) = %d\n", (int)sizeof(superblock));		// debug
 	if (!mem_init()) {
 		// need to reflect changes in this code (from metadata struct design to embedded metadata design)
 		int num_cpu = getNumProcessors();
@@ -386,6 +403,8 @@ int mm_init(void) {
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
 			curr_heap->bin_first[0][0] = bin_start + (i * NUM_BINS);
+			curr_heap->allocated = SB_SIZE;
+			curr_heap->used = 0;
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}

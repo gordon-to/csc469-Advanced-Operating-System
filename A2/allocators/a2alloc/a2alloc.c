@@ -65,7 +65,7 @@ typedef struct {
 
 // pointer to hold all heaps
 heap * heap_table;
-void * large_malloc_table;
+node * large_malloc_table;
 
 /*******************************
 	FUNCTIONS START
@@ -187,7 +187,7 @@ int get_cpuid() {
 
 void *malloc_large(size_t sz, int cpu_id) {
 	int pg_size = mem_pagesize();
-	int num_pages = ceil((sz+ sizeof(node))/pg_size);
+	int num_pages = (int) ceil((sz + sizeof(node))/pg_size);
 	node * lm_cpu = large_malloc_table + cpu_id;
 	
 	while (lm_cpu->next != NULL){
@@ -501,7 +501,7 @@ int mm_init(void) {
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
-		large_malloc_table = bin_start + ((num_cpu+1) * NUM_BINS);
+		large_malloc_table = (node *) (bin_start + ((num_cpu+1) * NUM_BINS));
 		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
 
 	}

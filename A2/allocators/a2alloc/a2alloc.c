@@ -213,16 +213,29 @@ int free_large(void *ptr, int cpu_id) {
 	if (lm_cpu->next == NULL) return 0;
 
 	int pg_size = mem_pagesize();
-	int num_pages = lm_cpu->num_pages;
+	int num_pages = ((node*)lm_cpu->next)->num_pages;
 	void* page_starts[num_pages];
 	superblock* free_sb[num_pages];
+	superblock* prev = NULL;
 	int i;
+	
 	for (i = 0; i < num_pages; i++) {
-		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * num_pages * i);
-		free_sb[i] = new_superblock(page_starts[i], 64);
+		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * i);
+		
+		// Create new superblocks
+		free_sb[i] = new_superblock(page_starts[i], 8);		// arbitrary block size
+		free_sb[i]->prev = prev;
+		if(prev) prev->next = free_sb[i];
+		
+		prev = free_sb[i];
 	}
-
-	// TODO, put all pointers from array page_starts into global heap
+	
+	// Now, put all pointers from array free_sb into global heap
+	if(heap_table[0].bin_first[0][0]) {
+		heap_table[0].bin_first[0][0]->prev = prev;
+	}
+	prev->next = heap_table[0].bin_first[0][0];
+	heap_table[0].bin_first[0][0]->next = free_sb[0];
 
 	lm_cpu->next = ((node *) lm_cpu->next)->next;
 	return 1;
@@ -390,7 +403,7 @@ void mm_free(void *ptr) {
 	
 	// Freeing for large blocks
 	if(type) {
-		if (free_large(ptr, cpu_id)) return;
+		if (free_large(page, cpu_id)) return;
 	}
 	
 	// Get the superblock data and deallocate it from the superblock

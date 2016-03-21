@@ -64,21 +64,6 @@ void * large_malloc_table;
 /*******************************
 	FUNCTIONS START
 *******************************/
-void *malloc_large(size_t sz, int cpu_id) {
-	int pg_size = mem_pagesize();
-	int num_pages = ceil((sz+ sizeof(node))/pg_size);
-	node * lm_cpu = large_malloc_table + cpu_id;
-
-	while (lm_cpu->next != NULL){
-		lm_cpu = lm_cpu->next;
-	}
-
-	void * tmp = mem_sbrk(num_pages * pg_size);	
-	lm_cpu->next = tmp;
-	lm_cpu->num_pages = num_pages;
-
-	return (lm_cpu->next + sizeof(node));
-}
 
 /* Creates a superblock at the given address and returns the pointer to it. */
 superblock *new_superblock(void* ptr, size_t block_size) {
@@ -86,9 +71,12 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 	
 	new_sb->block_size = block_size;
 	memset(&new_sb->block_map, 0, 64);
+	new_sb->used_blocks = 0;
 	// For small block size, first blocks are pre-reserved for metadata
 	if(block_size < sizeof(superblock) * 2) {
 		int blocks_used = ceil((float)sizeof(superblock) / (float)block_size);
+		new_sb->used_blocks = blocks_used;
+		
 		if(blocks_used <= 8) {
 			new_sb->block_map[0] = (int)pow(2, blocks_used) - 1;
 		} else {
@@ -97,7 +85,6 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 		}
 	}
 	
-	new_sb->used_blocks = 0;
 	new_sb->prev = NULL;
 	new_sb->next = NULL;
 
@@ -185,6 +172,48 @@ int get_cpuid() {
 	return cpu_id;
 }
 
+void *malloc_large(size_t sz, int cpu_id) {
+	int pg_size = mem_pagesize();
+	int num_pages = ceil((sz+ sizeof(node))/pg_size);
+	node * lm_cpu = large_malloc_table + cpu_id;
+
+	while (lm_cpu->next != NULL){
+		lm_cpu = lm_cpu->next;
+	}
+
+	void * tmp = mem_sbrk(num_pages * pg_size);	
+	lm_cpu->next = tmp;
+	lm_cpu->num_pages = num_pages;
+
+	return (lm_cpu->next + sizeof(node));
+}
+
+// return 1 if freed, else 0
+int free_large(void *ptr, int cpu_id) {
+	node * lm_cpu = large_malloc_table + cpu_id;
+	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
+		lm_cpu = lm_cpu->next;
+	}
+
+	if (lm_cpu->next == NULL) return 0;
+
+	int pg_size = mem_pagesize();
+	int num_pages = lm_cpu->num_pages;
+	void* page_starts[num_pages];
+	superblock* free_sb[num_pages];
+	int i;
+	for (i = 0; i < num_pages; i++) {
+		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * num_pages * i);
+		free_sb[i] = new_superblock(page_starts[i], 64);
+	}
+
+	// TODO, put all pointers from array page_starts into global heap
+
+	lm_cpu->next = ((node *) lm_cpu->next)->next;
+	return 1;
+}
+
+
 /****** MALLOC FUNCTIONS ******/
 void *mm_malloc(size_t sz) {
 	int cpu_id = get_cpuid();
@@ -257,11 +286,10 @@ void *mm_malloc(size_t sz) {
 				origin[1] = i;
 				origin[2] = 0;
 				
-				// Reset the block_size
-				target_sb->block_size = size_class;
-				// Also reset the block_map and used_blocks just in case
-				memset(&target_sb->block_map, 0, 64);
-				target_sb->used_blocks = 0;
+				// Reset the superblock (but keep it in the same bin)
+				superblock* next = target_sb->next;
+				target_sb = new_superblock(target_sb, size_class);
+				target_sb->next = next;
 			}
 		}
 		
@@ -329,40 +357,6 @@ void *mm_malloc(size_t sz) {
 	return block;
 }
 
-void init_sb_meta(superblock* new_sb_meta) {
-	new_sb_meta->block_size = SB_SIZE - sizeof(superblock);
-	memset(&new_sb_meta->block_map, 0, 64);
-	new_sb_meta->used_blocks = 0;
-	new_sb_meta->prev = NULL;
-	new_sb_meta->next = NULL;
-}
-
-
-// return 1 if freed, else 0
-int free_large(void *ptr, int cpu_id) {
-
-	node * lm_cpu = large_malloc_table + cpu_id;
-	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
-		lm_cpu = lm_cpu->next;
-	}
-
-	if (lm_cpu->next == NULL) return 0;
-
-	int pg_size = mem_pagesize();
-	int num_pages = lm_cpu->num_pages;
-	void* page_starts[num_pages];
-	int i;
-	for (i = 0; i < num_pages; i++) {
-		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * num_pages * i);
-		init_sb_meta((superblock *) page_starts[i]);
-	}
-
-	// TODO, put all pointers from array page_starts into global heap
-
-	lm_cpu->next = ((node *) lm_cpu->next)->next;
-	return 1;
-}
-
 void mm_free(void *ptr) {
 
 	int cpu_id = get_cpuid();
@@ -371,7 +365,6 @@ void mm_free(void *ptr) {
 
 	(void)ptr; /* Avoid warning about unused variable */
 }
-
 
 int mm_init(void) {
 

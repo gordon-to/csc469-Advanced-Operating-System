@@ -47,4 +47,4 @@ a2alloc.o:
 	cd ../; make
 
 clean:
-	rm -f *.o *.a *~
+	rm -f *.o *.a *~ main

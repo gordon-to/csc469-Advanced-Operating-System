@@ -10,8 +10,11 @@ int main() {
 	mm_init();
 	int * a;
 	int * b;
+	printf("Malloc request size 3000\n");
 	void * d = mm_malloc(3000);
+	printf("Malloc request size 4\n");
 	a = mm_malloc(4);
+	printf("Malloc request size 80\n");
 	b = mm_malloc(4 * 20);
 
 	*a = 4;
@@ -23,11 +26,13 @@ int main() {
 		printf("%d\n", b[i]);
 	}
 
-	mem_set(d, 1431655765, 750);
-
+	memset(d, 1431655765, 750);
+	
+	/*
 	for (i = 0; i < 2996; i ++) {
 		printf("%d\n", (int) *(d+i));
 	}
+	*/
 
 	mm_free(a);
 	printf("%d\n", *a);

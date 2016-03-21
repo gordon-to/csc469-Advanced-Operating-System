@@ -195,7 +195,7 @@ int get_cpuid() {
 
 void *malloc_large(size_t sz, int cpu_id) {
 	int pg_size = mem_pagesize();
-	int num_pages = (int) ceil((sz + sizeof(node))/pg_size);
+	int num_pages = ceil((float)(sz + sizeof(node))/(float)pg_size);
 	node * lm_cpu = large_malloc_table + cpu_id;
 	
 	while (lm_cpu->next != NULL){
@@ -397,6 +397,7 @@ void *mm_malloc(size_t sz) {
 	}
 	
 	// pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
+	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
 	return block;
 }
 
@@ -424,7 +425,7 @@ void mm_free(void *ptr) {
 	// Updating block map
 	int block_id = offset / sb->block_size;
 	printf("Free: block_id = %d\n", block_id);			// debug
-	printf("block_map[block_id/8] = %x\n", sb->block_map[block_id/8]);
+	printf("block_map[block_id/8] = %02x\n", sb->block_map[block_id/8]);
 	sb->block_map[block_id/8] -= pow(2, block_id % 8);
 	
 	// Book-keeping variables
@@ -444,7 +445,7 @@ void mm_free(void *ptr) {
 		int destination[3] = {HID, SID, new_fullness};
 		transfer_bins(sb, origin, destination);
 	}
-		
+	
 	// If this is global heap, return
 	if(HID == 0) {
 		pthread_mutex_unlock(&heap_table[0]->lock);
@@ -488,7 +489,6 @@ void mm_free(void *ptr) {
 }
 
 int mm_init(void) {
-	printf("sizeof(superblock) = %d\n", (int)sizeof(superblock));		// debug
 	if (!mem_init()) {
 		// need to reflect changes in this code (from metadata struct design to embedded metadata design)
 		void * sblock;
@@ -513,6 +513,7 @@ int mm_init(void) {
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
 		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
+		printf("what the balls\n");
 
 	}
 	// use mem_init to initialize

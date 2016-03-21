@@ -42,6 +42,7 @@ struct superblock {
 	size_t block_size;			// Block size class (b)
 	char block_map[64];			// 512-bit char bitmap indicating which blocks are being used
 	int used_blocks;			// A count of the currently used blocks (for fullness)
+	int heap_id;
 	superblock* prev;			// Pointer to previous superblock
 	superblock* next;			// Pointer to next superblock
 };
@@ -70,7 +71,9 @@ void * large_malloc_table;
 	FUNCTIONS START
 *******************************/
 
-/* Creates a superblock at the given address and returns the pointer to it. */
+/* Creates a superblock at the given address and returns the pointer to it.
+   ASSUMES the superblock will be going into the global heap, otherwise you are
+   required to change the heap_id after. */
 superblock *new_superblock(void* ptr, size_t block_size) {
 	superblock* new_sb = (superblock*)ptr;
 	
@@ -91,6 +94,7 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 		}
 	}
 	
+	new_sb->heap_id = 0;
 	new_sb->prev = NULL;
 	new_sb->next = NULL;
 
@@ -120,6 +124,9 @@ int transfer_bins(superblock* sb, int* orig, int* dest) {
 	sb->next = heap_table[dest[0]].bin_first[dest[1]][dest[2]];
 	sb->prev = NULL;
 	heap_table[dest[0]].bin_first[dest[1]][dest[2]] = sb;
+	if(dest[0] != orig[0]) {
+		sb->heap_id = dest[0];
+	}
 	
 	return 0;
 }
@@ -239,6 +246,7 @@ void *mm_malloc(size_t sz) {
 	for(size_id = 0; size_id < 9; size_id++) {
 		if(sz <= block_sizes[size_id]) {
 			size_class = block_sizes[size_id];
+			break;
 		}
 	}
 	// pthread_mutex_lock(&heap_table[cpu_id+1].lock);
@@ -298,6 +306,7 @@ void *mm_malloc(size_t sz) {
 				superblock* next = target_sb->next;
 				target_sb = new_superblock(target_sb, size_class);
 				target_sb->next = next;
+				break;
 			}
 		}
 		
@@ -372,9 +381,11 @@ void *mm_malloc(size_t sz) {
 
 void mm_free(void *ptr) {
 	int cpu_id = get_cpuid();
+	int SID, HID;			// size_id and heap_id
 	
 	// Move up to page border to read header data
 	void* page = (int*)((unsigned long)ptr - ((unsigned long)ptr % mem_pagesize()));
+	unsigned long offset = (unsigned long)ptr % mem_pagesize();
 	int type = *(int*)page;
 	
 	// Freeing for large blocks
@@ -382,17 +393,82 @@ void mm_free(void *ptr) {
 		if (free_large(ptr, cpu_id)) return;
 	}
 	
-	// Get the superblock data and deallocate it fro the superblock
+	// Get the superblock data and deallocate it from the superblock
 	superblock* sb = (superblock*)page;
+	HID = sb->heap_id;
+	if(HID == 0){
+		pthread_mutex_lock(&heap_table[HID].lock);
+	}
 	
-	// u[i] -= block_size
-	// sb->used_blocks--;
-	// update block_map;
+	// Updating block map
+	int block_id = offset / sb->block_size;
+	printf("Free: block_id = %d\n", block_id);			// debug
+	printf("block_map[block_id/8] = %x\n", sb->block_map[block_id/8]);
+	sb->block_map[block_id/8] -= pow(2, block_id % 8);
+	
+	// Book-keeping variables
+	float old_percent = sb->used_blocks / (SB_SIZE / sb->block_size);
+	int old_fullness = (int)(old_percent * FULLNESS_DENOMINATOR) + 1;
+	for(SID = 0; SID < 9; SID++) {
+		if(sb->block_size <= block_sizes[SID]) break;
+	}
+	sb->used_blocks--;
+	heap_table[HID].used -= sb->block_size;
 	
 	// Update fullness bins
-	// if(u[i] < a[i] - K * S and u[i] < a[i] / FULLNESS_DENOMINATOR)
-		// transfer an empty one to global heap
+	float new_percent = sb->used_blocks / (SB_SIZE / sb->block_size);
+	int new_fullness = (int)(new_percent * FULLNESS_DENOMINATOR) + 1;
+	if(new_fullness != old_fullness) {
+		int origin[3] = {HID, SID, old_fullness};
+		int destination[3] = {HID, SID, new_fullness};
+		transfer_bins(sb, origin, destination);
+	}
+		
+	// If this is global heap, return
+	if(HID == 0) {
+		pthread_mutex_unlock(&heap_table[0].lock);
+		return;
+	}
 	
+	// If our heap has crossed the emptiness threshold and has more than K
+	// superblocks worth of free space, return a mostly if not empty superblock
+	// to the global heap
+	if(heap_table[HID].used < heap_table[HID].allocated / FULLNESS_DENOMINATOR &&
+	   heap_table[HID].used < heap_table[HID].allocated - K * SB_SIZE) {
+	   	int i, j;
+		int origin[3] = {0, 0, 0};
+		superblock* target_sb = NULL;
+		
+		// Try to transfer a superblock from the empty bin, then look in the
+		// 25% bins if we don't find anything
+		for(j = 0; j <= 1; j++) {
+			for(i = 0; i < 9; i++) {
+				if(heap_table[HID].bin_first[i][j]) {
+					target_sb = heap_table[HID].bin_first[i][j];
+					origin[0] = HID;
+					origin[1] = i;
+					origin[2] = j;
+					break;
+				}
+			}
+			
+			// Falling through this means there weren't any completely empty sb
+			if(target_sb) {
+				break;
+			}
+		}
+		
+		// Move the superblock to the global heap
+		int destination[3] = {0, origin[1], origin[2]};
+		transfer_bins(target_sb, origin, destination);
+		int bytes_moved = target_sb->used_blocks * target_sb->block_size;
+		heap_table[HID].used -= bytes_moved;
+		heap_table[HID].allocated -= SB_SIZE;
+		heap_table[0].used += bytes_moved;
+		heap_table[0].allocated += SB_SIZE;
+	}
+	
+	// pthread_mutex_unlock(&heap_table[HID].lock);
 }
 
 int mm_init(void) {

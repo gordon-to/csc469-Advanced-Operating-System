@@ -55,11 +55,11 @@ typedef struct {
 
 typedef struct {
 	pthread_mutex_t lock;
+	int allocated;				// Space allocated to the heap in bytes
+	int used;					// Space used within the heap in bytes
 	// 2D Array of pointers to first superblock in each bin
 	// The first range specifies block size class (the ones from 8 - 2048)
 	// The second range specifies fullness (from 0 - 100%)
-	int allocated;				// Space allocated to the heap in bytes
-	int used;					// Space used within the heap in bytes
 	superblock* bin_first[9][NUM_BINS];
 } heap;
 
@@ -128,6 +128,12 @@ int transfer_bins(superblock* sb, int* orig, int* dest) {
 	heap_table[dest[0]]->bin_first[dest[1]][dest[2]] = sb;
 	if(dest[0] != orig[0]) {
 		sb->heap_id = dest[0];
+		
+		int bytes_moved = sb->used_blocks * sb->block_size;
+		heap_table[orig[0]]->used -= bytes_moved;
+		heap_table[orig[0]]->allocated -= SB_SIZE;
+		heap_table[dest[0]]->used += bytes_moved;
+		heap_table[dest[0]]->allocated += SB_SIZE;
 	}
 	
 	return 0;
@@ -330,8 +336,6 @@ void *mm_malloc(size_t sz) {
 		// check heap 0's bin 1 for size_id (25% bin)
 		if(!target_sb && heap_table[0]->bin_first[size_id][1]) {
 			target_sb = heap_table[0]->bin_first[size_id][1];
-			heap_table[0]->used -= target_sb->used_blocks * size_class;
-			heap_table[cpu_id+1]->used += target_sb->used_blocks * size_class;
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 1;
@@ -360,8 +364,6 @@ void *mm_malloc(size_t sz) {
 		// Move the superblock to the appropriate heap's bin_first
 		int destination[3] = {cpu_id+1, size_id, 1};
 		transfer_bins(target_sb, origin, destination);
-		heap_table[0]->allocated -= SB_SIZE;
-		heap_table[cpu_id+1]->allocated += SB_SIZE;
 		old_fullness = 1;
 		pthread_mutex_unlock(&heap_table[0]->lock);
 	}
@@ -480,11 +482,6 @@ void mm_free(void *ptr) {
 		// Move the superblock to the global heap
 		int destination[3] = {0, origin[1], origin[2]};
 		transfer_bins(target_sb, origin, destination);
-		int bytes_moved = target_sb->used_blocks * target_sb->block_size;
-		heap_table[HID]->used -= bytes_moved;
-		heap_table[HID]->allocated -= SB_SIZE;
-		heap_table[0]->used += bytes_moved;
-		heap_table[0]->allocated += SB_SIZE;
 	}
 	
 	// pthread_mutex_unlock(&heap_table[HID]->lock);

@@ -210,7 +210,7 @@ void *malloc_large(size_t sz, int cpu_id) {
 	new->num_pages = num_pages;
 	new->next = NULL;
 
-	return (new + sizeof(node));
+	return (new + 1);
 }
 
 // return 1 if freed, else 0

@@ -67,6 +67,9 @@ typedef struct {
 heap * heap_table;
 node * large_malloc_table;
 
+// global locks
+pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t global_sb_lock = PTHREAD_MUTEX_INITIALIZER;
 /*******************************
 	FUNCTIONS START
 *******************************/
@@ -194,7 +197,9 @@ void *malloc_large(size_t sz, int cpu_id) {
 		lm_cpu = lm_cpu->next;
 	}
 	
+	pthread_mutex_lock(&sbrk_lock);
 	node * new = (node*)mem_sbrk(num_pages * pg_size);	
+	pthread_mutex_unlock(&sbrk_lock);
 	lm_cpu->next = new;
 	new->type = 1;
 	new->num_pages = num_pages;
@@ -335,7 +340,9 @@ void *mm_malloc(size_t sz) {
 		
 		// If there literally were no blocks, we'll have to sbrk for one
 		if(!target_sb) {
+			pthread_mutex_lock(&sbrk_lock);
 			void* tmp = mem_sbrk(mem_pagesize());
+			pthread_mutex_unlock(&sbrk_lock);
 			if(!tmp) {
 				// No more space!
 				return NULL;
@@ -492,6 +499,9 @@ int mm_init(void) {
 		heap_table = (heap *) dseg_lo;
 		heap* curr_heap;
 		superblock * bin_start = (superblock *) (heap_table + num_cpu);
+		large_malloc_table = (node *) (bin_start + ((num_cpu+1) * NUM_BINS));
+		printf("heap_table = %p, bin_start = %p, large_malloc_table = %p", heap_table, bin_start, large_malloc_table);
+
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
@@ -501,7 +511,6 @@ int mm_init(void) {
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
-		large_malloc_table = (node *) (bin_start + ((num_cpu+1) * NUM_BINS));
 		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
 
 	}

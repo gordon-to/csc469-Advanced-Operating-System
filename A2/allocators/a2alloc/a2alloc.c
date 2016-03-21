@@ -69,7 +69,6 @@ node * large_malloc_table;
 
 // global locks
 pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t global_sb_lock = PTHREAD_MUTEX_INITIALIZER;
 /*******************************
 	FUNCTIONS START
 *******************************/

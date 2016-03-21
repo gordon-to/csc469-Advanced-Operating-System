@@ -37,6 +37,7 @@ typedef unsigned long vaddr_t;
 
 typedef struct superblock superblock;
 struct superblock {
+	int type;					// Indicator that this is a regular superblock (set to 0)
 	size_t block_size;			// Block size class (b)
 	char block_map[64];			// 512-bit char bitmap indicating which blocks are being used
 	int used_blocks;			// A count of the currently used blocks (for fullness)
@@ -45,6 +46,7 @@ struct superblock {
 };
 
 typedef struct {
+	int type;					// Indicator that this is a large block (set to 1)
 	int num_pages;
 	void * next;
 } node;
@@ -69,6 +71,7 @@ void * large_malloc_table;
 superblock *new_superblock(void* ptr, size_t block_size) {
 	superblock* new_sb = (superblock*)ptr;
 	
+	new_sb->type = 0;
 	new_sb->block_size = block_size;
 	memset(&new_sb->block_map, 0, 64);
 	new_sb->used_blocks = 0;
@@ -176,16 +179,18 @@ void *malloc_large(size_t sz, int cpu_id) {
 	int pg_size = mem_pagesize();
 	int num_pages = ceil((sz+ sizeof(node))/pg_size);
 	node * lm_cpu = large_malloc_table + cpu_id;
-
+	
 	while (lm_cpu->next != NULL){
 		lm_cpu = lm_cpu->next;
 	}
+	
+	node * new = (node*)mem_sbrk(num_pages * pg_size);	
+	lm_cpu->next = new;
+	new->type = 1;
+	new->num_pages = num_pages;
+	new->next = NULL;
 
-	void * tmp = mem_sbrk(num_pages * pg_size);	
-	lm_cpu->next = tmp;
-	lm_cpu->num_pages = num_pages;
-
-	return (lm_cpu->next + sizeof(node));
+	return (new + sizeof(node));
 }
 
 // return 1 if freed, else 0
@@ -358,8 +363,11 @@ void *mm_malloc(size_t sz) {
 }
 
 void mm_free(void *ptr) {
-
 	int cpu_id = get_cpuid();
+	
+	// Move up to page border to read header data
+	int* page = (int*)((unsigned long)ptr - ((unsigned long)ptr % mem_pagesize()));
+	int type = *page;
 	if (free_large(ptr, cpu_id)) return;
 
 
@@ -367,7 +375,7 @@ void mm_free(void *ptr) {
 }
 
 int mm_init(void) {
-
+	printf("sizeof(superblock) = %d", (int)sizeof(superblock));		// debug
 	if (!mem_init()) {
 		// need to reflect changes in this code (from metadata struct design to embedded metadata design)
 		int num_cpu = getNumProcessors();

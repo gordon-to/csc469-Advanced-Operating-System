@@ -35,17 +35,21 @@ static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 // Typedefs for all the necessary memory objects
 typedef unsigned long vaddr_t;
 
-typedef struct {
+typedef struct superblock superblock;
+struct superblock {
 	size_t block_size;			// Block size class (b)
 	char block_map[64];			// 512-bit char bitmap indicating which blocks are being used
 	int used_blocks;			// A count of the currently used blocks (for fullness)
-	void* prev;					// Pointer to previous meta block
-	void* next;					// Pointer to next meta block
-} superblock;
+	superblock* prev;					// Pointer to previous meta block
+	superblock* next;					// Pointer to next meta block
+};
 
 typedef struct {
 	pthread_mutex_t lock;
-	superblock* bin_first[];	// Array of pointers to first superblock in each bin
+	// 2D Array of pointers to first superblock in each bin
+	// The first range specifies block size class (the ones from 8 - 2048)
+	// The second range specifies fullness (from 0 - 100%)
+	superblock* bin_first[9][NUM_BINS];
 } heap;
 
 // pointer to hold all heaps
@@ -61,24 +65,42 @@ void *malloc_large(size_t sz) {
 
 /* Creates a superblock at the given address and returns the pointer to it. */
 superblock *new_superblock(void* ptr, size_t block_size) {
-	// We will run into an issue with reserving space for the metadata at the
-	// beginning of the superblock.
-	// The way I think we can handle this is:
-	//	- If the block size is less/equal to 2 * sizeof(superblock), then
-	//		the first x blocks taken up by the superblock will just always be
-	//		1's in the block_map (permanently taken)
-	//	- Otherwise, if block size is more than 2 * sizeof(superblock),
-	//		leave the first block as empty (0), but treat it as a special case
-	//		when alloc'ing blocks.
+	superblock* new_sb = (superblock*)ptr;
 	
-	// Then, when we're searching for free blocks during malloc, we can still
-	// use the first block, and it'll be the right size so we only have to
-	// check superblocks with the same block_size, the space will just be 32
-	// bytes smaller
-	
-	// tl;dr use the bullet point rules above
+	new_sb->block_size = block_size;
+	memset(&new_sb->block_map, 0, 64);
+	new_sb->used_blocks = 0;
+	new_sb->prev = NULL;
+	new_sb->next = NULL;
 
-	return NULL;
+	return new_sb;
+}
+
+/* Transfers a superblock from one bin to the front of the specified new bin.
+   Assumes global heap is locked. Returns error status. */
+int transfer_bins(superblock* sb, int* orig, int* dest) {
+	// Origin and destination are integer arrays that go by the following:
+	// [heap_id, size class, fullness]
+	
+	// First remove the sb from its original bin
+	if(sb->next) {
+		sb->next->prev = sb->prev;
+	}
+	if(sb->prev) {
+		sb->prev->next = sb->next;
+	} else {
+		heap_table[orig[0]].bin_first[orig[1]][orig[2]] = sb->next;
+	}
+	
+	// Then insert it into the front of the new bin
+	if(heap_table[dest[0]].bin_first[dest[1]][dest[2]]) {
+		heap_table[dest[0]].bin_first[dest[1]][dest[2]]->prev = sb;
+	}
+	sb->next = heap_table[dest[0]].bin_first[dest[1]][dest[2]];
+	sb->prev = NULL;
+	heap_table[dest[0]].bin_first[dest[1]][dest[2]] = sb;
+	
+	return 0;
 }
 
 /* Given a superblock's non-full block_map, look for a free block */
@@ -141,45 +163,48 @@ void *mm_malloc(size_t sz) {
 		return malloc_large(sz);
 	}
 	
+	int i, old_fullness, size_id;
 	int tid = getTID();
 	int cpu_id = get_cpuid(tid);
-	int j;
 	superblock* target_sb = NULL;
 	char use_first = 0;
-	size_t size_class;
+	size_t size_class = 8;
 	
 	// Get size class
-	for(j = 0; j < 9; j++) {
-		if(sz <= block_sizes[j]) {
-			size_class = block_sizes[j];
+	for(size_id = 0; size_id < 9; size_id++) {
+		if(sz <= block_sizes[size_id]) {
+			size_class = block_sizes[size_id];
 		}
 	}
 	// pthread_mutex_lock(&heap_table[cpu_id+1].lock);
 	
-	// Find a fairly full superblock that can fit request size (usually bin 5)
-	for(j = NUM_BINS - 1; j >= 0; j--) {
-		superblock* sb = heap_table[cpu_id+1].bin_first[j];
+	// Find a fairly full superblock with the appropriate block_size
+	// Go from nearly full bin to empty bin
+	for(i = NUM_BINS - 1; i >= 0; i--) {
+		superblock* sb = heap_table[cpu_id+1].bin_first[size_id][i];
 		
 		// Searching bin for superblock with space
 		while(sb) {
-			if(size_class == sb->block_size) {
-				// Special case check for first block (shared with metadata)
-				int cant_use_first = 0;
-				if(sz > size_class - sizeof(superblock) &&
-													!(sb->block_map[0] % 2)) {
-					cant_use_first = 1;
-				} else {
-					use_first = 1;
-					target_sb = sb;
-					break;
-				}
-				
-				// Now do normal check
-				if(sb->used_blocks + cant_use_first < SB_SIZE / sb->block_size) {
-					// Found a superblock with space
-					target_sb = sb;
-					break;
-				}
+			// Special case check for first block (shared with metadata)
+			int cant_use_first = 0;
+			if(!(sb->block_map[0] % 2) && sz > size_class - sizeof(superblock)) {
+				// If the first block is "free" but the request size doesn't
+				// fit in that space, then we have to consider the block as 
+				// unusable for this case.
+				cant_use_first = 1;
+			} else {
+				use_first = 1;
+				target_sb = sb;
+				old_fullness = i;
+				break;
+			}
+			
+			// Now do normal check
+			if(sb->used_blocks + cant_use_first < SB_SIZE / size_class) {
+				// Found a superblock with space
+				target_sb = sb;
+				old_fullness = i;
+				break;
 			}
 			
 			sb = sb->next;
@@ -190,16 +215,59 @@ void *mm_malloc(size_t sz) {
 		}
 	}
 	
-	// if there's no space
-		// check heap 0's bin 0 (empty bin)
-		// check heap 0's bin 1 (25% bin)
-	
-		// if there's no superblock
-			// call mem_sbrk
+	// If there were no available superblocks with the right block_size, then
+	// we need to get a new one
+	if(!target_sb) {
+		int origin[3] = {0, 0, 0};
+		pthread_mutex_lock(&heap_table[0].lock);
 		
-		// call new_superblock()
-		// set the superblock as heap i's bin_first[0]
-		// remember to adjust the pointer for the former bin_first
+		// check all of heap 0's empty bins
+		for(i = 0; i < 9; i++) {
+			if(heap_table[0].bin_first[i][0]) {
+				target_sb = heap_table[0].bin_first[i][0];
+				origin[0] = 0;
+				origin[1] = i;
+				origin[2] = 0;
+				
+				// Reset the block_size
+				target_sb->block_size = size_class;
+				// Also reset the block_map and used_blocks just in case
+				memset(&target_sb->block_map, 0, 64);
+				target_sb->used_blocks = 0;
+			}
+		}
+		
+		// check heap 0's bin 1 for size_id (25% bin)
+		if(!target_sb && heap_table[0].bin_first[size_id][1]) {
+			target_sb = heap_table[0].bin_first[size_id][1];
+			origin[0] = 0;
+			origin[1] = size_id;
+			origin[2] = 1;
+		}
+		
+		// If there literally were no blocks, we'll have to sbrk for one
+		if(!target_sb) {
+			void* tmp = mem_sbrk(mem_pagesize());
+			if(!tmp) {
+				// No more space!
+				return NULL;
+			}
+			
+			// Initialize the superblock
+			target_sb = new_superblock(tmp, size_class);
+			// For compatibility, we'll slot it into the global heap temporarily
+			heap_table[0].bin_first[size_class][0] = target_sb;
+			origin[0] = 0;
+			origin[1] = size_id;
+			origin[2] = 0;
+		}
+		
+		// Move the superblock to the appropriate heap's bin_first
+		int destination[3] = {cpu_id+1, size_id, 1};
+		transfer_bins(target_sb, origin, destination);
+		old_fullness = 1;
+		pthread_mutex_unlock(&heap_table[0].lock);
+	}
 		
 	// Now that we have our superblock, get a free block
 	void* block;
@@ -218,6 +286,15 @@ void *mm_malloc(size_t sz) {
 		// Change block map and used_blocks
 		target_sb->block_map[block_id/8] += pow(2, block_id % 8);
 		target_sb->used_blocks++;
+	}
+	
+	// If the bin has changed fullness, we'll need to move it accordingly
+	float new_percent = target_sb->used_blocks / (SB_SIZE / size_class);
+	int new_fullness = (int)(new_percent * FULLNESS_DENOMINATOR) + 1;
+	if(new_fullness != old_fullness) {
+		int origin[3] = {cpu_id+1, size_class, old_fullness};
+		int destination[3] = {cpu_id+1, size_class, new_fullness};
+		transfer_bins(target_sb, origin, destination);
 	}
 	
 	// pthread_mutex_unlock(&heap_table[cpu_id+1].lock);
@@ -248,7 +325,7 @@ int mm_init(void) {
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
 			curr_heap = heap_table + i;
-			curr_heap->bin_first[0] = bin_start + (i * NUM_BINS);
+			curr_heap->bin_first[0][0] = bin_start + (i * NUM_BINS);
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
@@ -260,7 +337,7 @@ int mm_init(void) {
 	
 	// consider having a bin for each block size * NUM_BINS
 	
-	// we should now have 9 heaps, each with empty bins and a pointer to their first metablock
+	// we should now have 9 heaps, each with just empty bins
 	
 	return 0;
 }

@@ -40,9 +40,14 @@ struct superblock {
 	size_t block_size;			// Block size class (b)
 	char block_map[64];			// 512-bit char bitmap indicating which blocks are being used
 	int used_blocks;			// A count of the currently used blocks (for fullness)
-	superblock* prev;					// Pointer to previous meta block
-	superblock* next;					// Pointer to next meta block
+	superblock* prev;			// Pointer to previous superblock
+	superblock* next;			// Pointer to next superblock
 };
+
+typedef struct {
+	int num_pages;
+	void * next;
+} node;
 
 typedef struct {
 	pthread_mutex_t lock;
@@ -54,13 +59,25 @@ typedef struct {
 
 // pointer to hold all heaps
 heap * heap_table;
+void * large_malloc_table;
 
 /*******************************
 	FUNCTIONS START
 *******************************/
-void *malloc_large(size_t sz) {
-	(void)sz;
-	return NULL;
+void *malloc_large(size_t sz, int cpu_id) {
+	int pg_size = mem_pagesize();
+	int num_pages = ceil((sz+ sizeof(node))/pg_size);
+	node * lm_cpu = large_malloc_table + cpu_id;
+
+	while (lm_cpu->next != NULL){
+		lm_cpu = lm_cpu->next;
+	}
+
+	void * tmp = mem_sbrk(num_pages * pg_size);	
+	lm_cpu->next = tmp;
+	lm_cpu->num_pages = num_pages;
+
+	return (lm_cpu->next + sizeof(node));
 }
 
 /* Creates a superblock at the given address and returns the pointer to it. */
@@ -135,7 +152,8 @@ int find_block(char* block_map, size_t block_size) {
 	return -1;
 }
 
-int get_cpuid(int tid) {
+int get_cpuid() {
+	int tid = getTID();
 	int cpu_id = -1;
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
@@ -158,14 +176,13 @@ int get_cpuid(int tid) {
 
 /****** MALLOC FUNCTIONS ******/
 void *mm_malloc(size_t sz) {
+	int cpu_id = get_cpuid();
 	if(sz > SB_SIZE / 2) {
 		// Request size is too large, fall back to generic allocation
-		return malloc_large(sz);
+		return malloc_large(sz, cpu_id);
 	}
 	
 	int i, old_fullness, size_id;
-	int tid = getTID();
-	int cpu_id = get_cpuid(tid);
 	superblock* target_sb = NULL;
 	char use_first = 0;
 	size_t size_class = 8;
@@ -301,16 +318,47 @@ void *mm_malloc(size_t sz) {
 	return block;
 }
 
-void mm_free(void *ptr) {
-	(void)ptr; /* Avoid warning about unused variable */
-}
-
 void init_sb_meta(superblock* new_sb_meta) {
 	new_sb_meta->block_size = SB_SIZE - sizeof(superblock);
 	memset(&new_sb_meta->block_map, 0, 64);
 	new_sb_meta->used_blocks = 0;
 	new_sb_meta->prev = NULL;
 	new_sb_meta->next = NULL;
+}
+
+
+// return 1 if freed, else 0
+int free_large(void *ptr, int cpu_id) {
+
+	node * lm_cpu = large_malloc_table + cpu_id;
+	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
+		lm_cpu = lm_cpu->next;
+	}
+
+	if (lm_cpu->next == NULL) return 0;
+
+	int pg_size = mem_pagesize();
+	int num_pages = lm_cpu->num_pages;
+	void* page_starts[num_pages];
+	int i;
+	for (i = 0; i < num_pages; i++) {
+		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * num_pages * i);
+		init_sb_meta((superblock *) page_starts[i]);
+	}
+
+	// TODO, put all pointers from array page_starts into global heap
+
+	lm_cpu->next = ((node *) lm_cpu->next)->next;
+	return 1;
+}
+
+void mm_free(void *ptr) {
+
+	int cpu_id = get_cpuid();
+	if (free_large(ptr, cpu_id)) return;
+
+
+	(void)ptr; /* Avoid warning about unused variable */
 }
 
 
@@ -329,6 +377,9 @@ int mm_init(void) {
 			pthread_mutex_init(&curr_heap->lock, NULL);
 			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
+		large_malloc_table = bin_start + ((num_cpu+1) * NUM_BINS);
+		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
+
 	}
 	// use mem_init to initialize
 	// create an array containing a heap for each thread

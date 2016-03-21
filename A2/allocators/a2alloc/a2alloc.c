@@ -86,6 +86,17 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 	
 	new_sb->block_size = block_size;
 	memset(&new_sb->block_map, 0, 64);
+	// For small block size, first blocks are pre-reserved for metadata
+	if(block_size < sizeof(superblock) * 2) {
+		int blocks_used = ceil((float)sizeof(superblock) / (float)block_size);
+		if(blocks_used <= 8) {
+			new_sb->block_map[0] = (int)pow(2, blocks_used) - 1;
+		} else {
+			new_sb->block_map[0] = 255;
+			new_sb->block_map[1] = (int)pow(2, blocks_used % 8) - 1;
+		}
+	}
+	
 	new_sb->used_blocks = 0;
 	new_sb->prev = NULL;
 	new_sb->next = NULL;

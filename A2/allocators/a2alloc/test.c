@@ -12,10 +12,12 @@ int main() {
 	int * b;
 	printf("Malloc request size 3000\n");
 	void * d = mm_malloc(3000);
+	/*
 	printf("Malloc request size 4\n");
 	a = mm_malloc(4);
 	printf("Malloc request size 80\n");
 	b = mm_malloc(4 * 20);
+	*/
 	
 	printf("Malloc request size 1600\n");
 	int* e = mm_malloc(1600);
@@ -25,7 +27,16 @@ int main() {
 	// mm_free(f);
 	printf("Malloc request size 1600\n");
 	int* g = mm_malloc(1600);
+	printf("Malloc request size 1600\n");
+	int* h = mm_malloc(1600);
 	// int* h = mm_malloc(4);
+	mm_free(g);
+	mm_free(h);
+	printf("Malloc request size 1600\n");
+	a = mm_malloc(1600);
+	printf("Malloc request size 1600\n");
+	b = mm_malloc(1600);
+	
 
 	*a = 4;
 	//printf("%d\n", *a);

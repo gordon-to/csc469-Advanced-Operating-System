@@ -300,16 +300,18 @@ void *mm_malloc(size_t sz) {
 		while(sb) {
 			// Special case check for first block (shared with metadata)
 			int cant_use_first = 0;
-			if(!(sb->block_map[0] % 2) && sz > size_class - sizeof(superblock)) {
+			if(!(sb->block_map[0] % 2)) {
 				// If the first block is "free" but the request size doesn't
 				// fit in that space, then we have to consider the block as 
 				// unusable for this case.
-				cant_use_first = 1;
-			} else {
-				use_first = 1;
-				target_sb = sb;
-				old_fullness = i;
-				break;
+				if(sz > size_class - sizeof(superblock)) {
+					cant_use_first = 1;
+				} else {
+					use_first = 1;
+					target_sb = sb;
+					old_fullness = i;
+					break;
+				}
 			}
 			
 			// Now do normal check
@@ -421,7 +423,6 @@ void *mm_malloc(size_t sz) {
 		transfer_bins(target_sb, origin, destination);
 	}
 	
-	pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
 	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
 	printf("block_size: %d\n", (int)target_sb->block_size);
 	printf("block_map[0]: %hhu\n", target_sb->block_map[0]);
@@ -431,6 +432,9 @@ void *mm_malloc(size_t sz) {
 	printf("heap_id: %d\n", target_sb->heap_id);
 	printf("prev: %p\n", target_sb->prev);
 	printf("next: %p\n\n", target_sb->next);
+	
+	pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
+	
 	return block;
 }
 
@@ -488,6 +492,7 @@ void mm_free(void *ptr) {
 	// If our heap has crossed the emptiness threshold and has more than K
 	// superblocks worth of free space, return a mostly if not empty superblock
 	// to the global heap
+	// printf("Heap %d usage: %d / %d\n", HID, heap_table[HID]->used, heap_table[HID]->allocated);
 	if(heap_table[HID]->used < heap_table[HID]->allocated / FULLNESS_DENOMINATOR &&
 	   heap_table[HID]->used < heap_table[HID]->allocated - K * SB_SIZE) {
 	   	int i, j;

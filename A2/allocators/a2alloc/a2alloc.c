@@ -27,6 +27,7 @@ name_t myname = {
 // Block sizes
 #define SB_SIZE 4096						// super block size (S)
 static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
+static size_t pg_size;
 
 // Fullness binning
 #define FULLNESS_DENOMINATOR 4				// Amount to divide S for each fullness bin, and will also act as empty fraction (f)
@@ -34,8 +35,6 @@ static const size_t block_sizes[9] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048};
 #define K 8									// Minimum superblock threshold (K)
 
 // Typedefs for all the necessary memory objects
-typedef unsigned long vaddr_t;
-
 typedef struct superblock superblock;
 struct superblock {
 	int type;					// Indicator that this is a regular superblock (set to 0)
@@ -48,9 +47,11 @@ struct superblock {
 };
 
 typedef struct {
+	// Node large malloc linked lists
 	int type;					// Indicator that this is a large block (set to 1)
 	int num_pages;
-	int cpu_id;
+	int heap_id;				// If this belongs to the global heap, indicates that the chunk is free
+	void * prev;
 	void * next;
 } node;
 
@@ -58,6 +59,7 @@ typedef struct {
 	pthread_mutex_t lock;
 	int allocated;				// Space allocated to the heap in bytes
 	int used;					// Space used within the heap in bytes
+	node* bin_large;			// Bin for large mallocs
 	// 2D Array of pointers to first superblock in each bin
 	// The first range specifies block size class (the ones from 8 - 2048)
 	// The second range specifies fullness (from 0 - 100%)
@@ -66,11 +68,10 @@ typedef struct {
 
 // pointer to hold all heaps
 heap ** heap_table;
-node * large_malloc_table;
 
 // global locks
 pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t lm_lock = PTHREAD_MUTEX_INITIALIZER;
+
 /*******************************
 	FUNCTIONS START
 *******************************/
@@ -176,6 +177,7 @@ int find_block(char* block_map, size_t block_size) {
 	return -1;
 }
 
+/* Gets the CPU ID of the current calling thread */
 int get_cpuid() {
 	int tid = getTID();
 	int cpu_id = -1;
@@ -198,74 +200,104 @@ int get_cpuid() {
 	return cpu_id;
 }
 
+/* Malloc for large request sizes (>S/2) */
 void *malloc_large(size_t sz, int cpu_id) {
-	int pg_size = mem_pagesize();
-	int num_pages = ceil((float)(sz + sizeof(node))/(float)pg_size);
-	node * lm_cpu = large_malloc_table + cpu_id;
-	char lo = 0;
-
-	// if global needs to be changed
-	if (lm_cpu->next == NULL) {
-		pthread_mutex_lock(&lm_lock);
-		lo = 1;
+	int num_pages = ceil((float)(sz + sizeof(node))/(float)SB_SIZE);
+	node* target = NULL;
+	
+	// Search the global heap for any free space
+	pthread_mutex_lock(&heap_table[0]->lock);
+	node* curr = heap_table[0]->bin_large;
+	while(curr) {
+		if(curr->num_pages >= num_pages) {
+			// We found a space that will fit our request
+			target = curr;
+			node* new_next = NULL;
+			node* new_prev = NULL;
+			
+			// Take only what we need from the chunk			
+			if(curr->num_pages > num_pages) {
+				// Need to adjust the empty space in the global heap
+				node* adjusted_head = (node*)((unsigned long)curr + (num_pages * pg_size));
+				
+				adjusted_head->type = 1;
+				adjusted_head->num_pages = curr->num_pages - num_pages;
+				adjusted_head->heap_id = 0;
+				adjusted_head->prev = curr->prev;
+				adjusted_head->next = curr->next;
+				
+				new_next = adjusted_head;
+				new_prev = adjusted_head;
+			} else {
+				new_next = curr->next;
+				new_prev = curr->prev;
+			}
+			
+			if(curr->prev) {
+				((node*)curr->prev)->next = new_next;
+			} else {
+				heap_table[0]->bin_large = new_next;
+			}
+			if(curr->next) ((node*)curr->next)->prev = new_prev;
+			
+			break;
+		}
+		
+		curr = curr->next;
+	}
+	pthread_mutex_unlock(&heap_table[0]->lock);
+	
+	// If there is no space, use sbrk
+	if(!target) {
+		pthread_mutex_lock(&sbrk_lock);
+		target = (node*)mem_sbrk(num_pages * pg_size);
+		pthread_mutex_unlock(&sbrk_lock);
 	}
 	
-	while (lm_cpu->next != NULL){
-		lm_cpu = lm_cpu->next;
+	// Now insert the new block into the heap's large malloc bin and initialize
+	pthread_mutex_lock(&heap_table[cpu_id+1]->lock);
+	if(heap_table[cpu_id+1]->bin_large) {
+		heap_table[cpu_id+1]->bin_large->prev = target;
 	}
+	target->next = heap_table[cpu_id+1]->bin_large;
+	target->prev = NULL;
+	heap_table[cpu_id+1]->bin_large = target;
 	
-	pthread_mutex_lock(&sbrk_lock);
-	node * new = (node*)mem_sbrk(num_pages * pg_size);	
-	pthread_mutex_unlock(&sbrk_lock);
-	lm_cpu->next = new;
-	if (lo) {
-		pthread_mutex_unlock(&lm_lock);
-	}
-	new->type = 1;
-	new->num_pages = num_pages;
-	new->cpu_id = cpu_id;
-	new->next = NULL;
-
-	return (new + 1);
+	target->type = 1;
+	target->num_pages = num_pages;
+	target->heap_id = cpu_id;
+	pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
+	
+	return (target + 1);
 }
 
-// return 1 if freed, else 0
-int free_large(void *ptr, int cpu_id) {
-	node * lm_cpu = large_malloc_table + cpu_id;
+/* Free for large allocated blocks (type = 1) */
+void free_large(node* target) {
+	// For the sake of efficiency, we're going to use the page border pointer
+	// that was already calculated in mm_free() as the input
+	int HID = target->heap_id;
 	
-	while (lm_cpu->next != NULL && (((node *) lm_cpu->next) + 1) != ptr){
-		lm_cpu = lm_cpu->next;
+	// Remove the target block from its original heap
+	pthread_mutex_lock(&heap_table[HID]->lock);
+	if(target->prev) {
+		((node*)target->prev)->next = target->next;
+	} else {
+		heap_table[HID]->bin_large = target->next;
 	}
-
-	if (lm_cpu->next == NULL) return 0;
-
-	int pg_size = mem_pagesize();
-	int num_pages = ((node*)lm_cpu->next)->num_pages;
-	void* page_starts[num_pages];
-	superblock* free_sb[num_pages];
-	superblock* prev = NULL;
-	int i;
+	if(target->next) ((node*)target->next)->prev = target->prev;
+	pthread_mutex_unlock(&heap_table[HID]->lock);
 	
-	for (i = 0; i < num_pages; i++) {
-		page_starts[i] = ((void *) lm_cpu->next) + (pg_size * i);
-		
-		// Create new superblocks
-		free_sb[i] = new_superblock(page_starts[i], 8);		// arbitrary block size
-		free_sb[i]->prev = prev;
-		if(prev) prev->next = free_sb[i];
-		
-		prev = free_sb[i];
+	// Insert the block to the beginning of the global (free) heap
+	pthread_mutex_lock(&heap_table[0]->lock);
+	if(heap_table[0]->bin_large) {
+		heap_table[0]->bin_large->prev = target;
 	}
+	target->next = heap_table[0]->bin_large;
+	target->prev = NULL;
+	heap_table[0]->bin_large = target;
+	pthread_mutex_unlock(&heap_table[0]->lock);
 	
-	// Now, put all pointers from array free_sb into global heap
-	if(heap_table[0]->bin_first[0][0]) {
-		heap_table[0]->bin_first[0][0]->prev = prev;
-	}
-	prev->next = heap_table[0]->bin_first[0][0];
-	heap_table[0]->bin_first[0][0] = free_sb[0];
-
-	lm_cpu->next = ((node *) lm_cpu->next)->next;
-	return 1;
+	return;
 }
 
 
@@ -365,7 +397,9 @@ void *mm_malloc(size_t sz) {
 		
 		// If there literally were no blocks, we'll have to sbrk for one
 		if(!target_sb) {
-			void* tmp = mem_sbrk(mem_pagesize());
+			pthread_mutex_lock(&sbrk_lock);
+			void* tmp = mem_sbrk(pg_size);
+			pthread_mutex_unlock(&sbrk_lock);
 			if(!tmp) {
 				// No more space!
 				printf("Error: No more space in heap.");
@@ -450,10 +484,7 @@ void mm_free(void *ptr) {
 	
 	// Freeing for large blocks
 	if(type) {
-		node* block = (node*)page;
-		if(!free_large(ptr, block->cpu_id)) {
-			printf("Error occurred when freeing large block at %p.\n", ptr);
-		}
+		free_large((node*)page);
 		return;
 	}
 	
@@ -530,28 +561,22 @@ void mm_free(void *ptr) {
 
 int mm_init(void) {
 	if (!mem_init()) {
-		void * sblock;
 		int num_cpu = getNumProcessors();
-		int pg_size = mem_pagesize();
+		pg_size = mem_pagesize();
 		heap_table = (heap **) mem_sbrk(pg_size);
-		//heap_table = (heap **) dseg_lo;
-		//heap ** c_heap_table;
-		heap* curr_heap;
-		large_malloc_table = (node *) (heap_table + num_cpu + 1);
 
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
-			sblock = mem_sbrk(pg_size);
-			curr_heap = (heap *) sblock;
-			heap_table[i] = curr_heap;
-			//c_heap_table = heap_table + i;
-			//*c_heap_table = curr_heap;
-			curr_heap->allocated = 0;
-			curr_heap->used = 0;
-			pthread_mutex_init(&curr_heap->lock, NULL);
-			memset(curr_heap->bin_first, 0, sizeof(superblock*) * 9 * NUM_BINS);
+			// Allocate a page for each heap
+			heap_table[i] = (heap *)mem_sbrk(pg_size);
+			
+			// Initialize the heaps
+			pthread_mutex_init(&heap_table[i]->lock, NULL);
+			heap_table[i]->allocated = 0;
+			heap_table[i]->used = 0;
+			heap_table[i]->bin_large = NULL;
+			memset(heap_table[i]->bin_first, 0, sizeof(superblock*) * 9 * NUM_BINS);
 		}
-		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
 	}
 	return 0;
 }

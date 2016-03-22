@@ -21,8 +21,11 @@ int main() {
 	int* e = mm_malloc(1600);
 	printf("Malloc request size 1600\n");
 	int* f = mm_malloc(1600);
+	// mm_free(e);
+	// mm_free(f);
 	printf("Malloc request size 1600\n");
 	int* g = mm_malloc(1600);
+	// int* h = mm_malloc(4);
 
 	*a = 4;
 	//printf("%d\n", *a);

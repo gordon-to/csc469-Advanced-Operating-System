@@ -96,6 +96,7 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 			new_sb->block_map[0] = 255;
 			new_sb->block_map[1] = (char)pow(2, blocks_used % 8) - 1;
 		}
+		heap_table[0]->used += blocks_used * new_sb->block_size;
 	}
 	
 	new_sb->heap_id = 0;

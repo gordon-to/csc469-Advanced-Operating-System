@@ -497,8 +497,7 @@ int mm_init(void) {
 		heap_table = (heap **) dseg_lo;
 		heap ** c_heap_table;
 		heap* curr_heap;
-		superblock * bin_start = (superblock *) (heap_table + num_cpu);
-		large_malloc_table = (node *) (bin_start + ((num_cpu+1) * NUM_BINS));
+		large_malloc_table = (node *) (heap_table + num_cpu + 1);
 
 		int i;
 		for (i = 0; i <= num_cpu; i++) {
@@ -506,14 +505,9 @@ int mm_init(void) {
 			curr_heap = (heap *) sblock;
 			c_heap_table = heap_table + i;
 			*c_heap_table = curr_heap;
-			curr_heap->bin_first[0][0] = bin_start + (i * NUM_BINS);
-			curr_heap->allocated = SB_SIZE;
-			curr_heap->used = 0;
 			pthread_mutex_init(&curr_heap->lock, NULL);
-			memset(curr_heap->bin_first[0], 0, sizeof(superblock *) * num_cpu);
 		}
 		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
-		printf("what the balls\n");
 
 	}
 	// use mem_init to initialize

@@ -129,6 +129,8 @@ int transfer_bins(superblock* sb, int* orig, int* dest) {
 	heap_table[dest[0]]->bin_first[dest[1]][dest[2]] = sb;
 	if(dest[0] != orig[0]) {
 		sb->heap_id = dest[0];
+		// printf("From heap %d: bin[%d][%d]\n", orig[0], orig[1], orig[2]);
+		// printf("To heap %d: bin[%d][%d]\n", dest[0], dest[1], dest[2]);
 		
 		int bytes_moved = sb->used_blocks * sb->block_size;
 		heap_table[orig[0]]->used -= bytes_moved;
@@ -361,7 +363,7 @@ void *mm_malloc(size_t sz) {
 			// Initialize the superblock
 			target_sb = new_superblock(tmp, size_class);
 			// For compatibility, we'll slot it into the global heap temporarily
-			heap_table[0]->bin_first[size_class][0] = target_sb;
+			heap_table[0]->bin_first[size_id][0] = target_sb;
 			heap_table[0]->allocated += SB_SIZE;
 			origin[0] = 0;
 			origin[1] = size_id;

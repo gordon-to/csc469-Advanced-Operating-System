@@ -219,7 +219,7 @@ void *malloc_large(size_t sz, int cpu_id) {
 int free_large(void *ptr, int cpu_id) {
 	node * lm_cpu = large_malloc_table + cpu_id;
 	
-	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
+	while (lm_cpu->next != NULL && (((node *) lm_cpu->next) + 1) != ptr){
 		lm_cpu = lm_cpu->next;
 	}
 

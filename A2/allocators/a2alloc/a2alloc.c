@@ -70,6 +70,7 @@ node * large_malloc_table;
 
 // global locks
 pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lm_lock = PTHREAD_MUTEX_INITIALIZER;
 /*******************************
 	FUNCTIONS START
 *******************************/
@@ -200,6 +201,13 @@ void *malloc_large(size_t sz, int cpu_id) {
 	int pg_size = mem_pagesize();
 	int num_pages = ceil((float)(sz + sizeof(node))/(float)pg_size);
 	node * lm_cpu = large_malloc_table + cpu_id;
+	char lo = 0;
+
+	// if global needs to be changed
+	if (lm_cpu->next == NULL) {
+		pthread_mutex_lock(&lm_lock);
+		lo = 1;
+	}
 	
 	while (lm_cpu->next != NULL){
 		lm_cpu = lm_cpu->next;
@@ -209,6 +217,9 @@ void *malloc_large(size_t sz, int cpu_id) {
 	node * new = (node*)mem_sbrk(num_pages * pg_size);	
 	pthread_mutex_unlock(&sbrk_lock);
 	lm_cpu->next = new;
+	if (lo) {
+		pthread_mutex_unlock(&lm_lock);
+	}
 	new->type = 1;
 	new->num_pages = num_pages;
 	new->cpu_id = cpu_id;

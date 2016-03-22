@@ -1,6 +1,6 @@
 
 CC = gcc
-CC_FLAGS = -O3
+CC_FLAGS = -O3 -g
 CC_DBG_FLAGS = -g
 INCLUDES = .
 
@@ -44,7 +44,7 @@ main:
 	gcc -Wall -g -o main test.c a2alloc.o tsc.o mm_thread.o memlib.o -lm
 
 a2alloc.o:
-	cd ../; make
+	cd ../; make debug
 
 clean:
 	rm -f *.o *.a *~ main

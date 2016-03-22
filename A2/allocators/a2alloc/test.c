@@ -16,9 +16,19 @@ int main() {
 	a = mm_malloc(4);
 	printf("Malloc request size 80\n");
 	b = mm_malloc(4 * 20);
+	
+	printf("Malloc request size 1600\n");
+	int* e = mm_malloc(1600);
+	printf("Malloc request size 1600\n");
+	int* f = mm_malloc(1600);
+	printf("Malloc request size 1600\n");
+	int* g = mm_malloc(1600);
 
 	*a = 4;
 	//printf("%d\n", *a);
+	*e = 1;
+	*f = 1;
+	*g = 1;
 
 	int i;
 	for (i = 0; i < 20; i++) {

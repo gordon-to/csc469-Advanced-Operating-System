@@ -279,7 +279,7 @@ void *mm_malloc(size_t sz) {
 	
 	// Find a fairly full superblock with the appropriate block_size
 	// Go from nearly full bin to empty bin
-	for(i = NUM_BINS - 1; i >= 0; i--) {
+	for(i = NUM_BINS - 2; i >= 0; i--) {
 		superblock* sb = heap_table[cpu_id+1]->bin_first[size_id][i];
 		
 		// Searching bin for superblock with space
@@ -323,6 +323,7 @@ void *mm_malloc(size_t sz) {
 		// check all of heap 0's empty bins
 		for(i = 0; i < 9; i++) {
 			if(heap_table[0]->bin_first[i][0]) {
+				printf("%d: %p\n", i, heap_table[0]->bin_first[i][0]);
 				target_sb = heap_table[0]->bin_first[i][0];
 				origin[0] = 0;
 				origin[1] = i;
@@ -332,6 +333,7 @@ void *mm_malloc(size_t sz) {
 				superblock* next = target_sb->next;
 				target_sb = new_superblock(target_sb, size_class);
 				target_sb->next = next;
+				printf("1\n");
 				break;
 			}
 		}
@@ -342,6 +344,7 @@ void *mm_malloc(size_t sz) {
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 1;
+				printf("2\n");
 		}
 		
 		// If there literally were no blocks, we'll have to sbrk for one
@@ -351,6 +354,7 @@ void *mm_malloc(size_t sz) {
 			pthread_mutex_unlock(&sbrk_lock);
 			if(!tmp) {
 				// No more space!
+				printf("Error: No more space in heap.");
 				return NULL;
 			}
 			
@@ -362,6 +366,7 @@ void *mm_malloc(size_t sz) {
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 0;
+				printf("3\n");
 		}
 		
 		// Move the superblock to the appropriate heap's bin_first
@@ -380,6 +385,11 @@ void *mm_malloc(size_t sz) {
 	} else {
 		// Check the block_maps for free blocks
 		int block_id = find_block(target_sb->block_map, size_class);
+		if(block_id == -1) {
+			// For some reason there was no space
+			printf("Error: Superblock has no free space.");
+			return NULL;
+		}
 		block = (char*)target_sb + block_id * size_class;
 		// printf("target_sb + (block_id * size_class) = block\n");
 		// printf("%p + %d = %p\n", target_sb, block_id * size_class, block);
@@ -391,7 +401,7 @@ void *mm_malloc(size_t sz) {
 	heap_table[cpu_id+1]->used += size_class;
 	
 	// If the bin has changed fullness, we'll need to move it accordingly
-	float new_percent = target_sb->used_blocks / (SB_SIZE / size_class);
+	float new_percent = (float)target_sb->used_blocks / (float)(SB_SIZE / size_class);
 	int new_fullness = (int)(new_percent * FULLNESS_DENOMINATOR) + 1;
 	if(new_fullness != old_fullness) {
 		int origin[3] = {cpu_id+1, size_id, old_fullness};
@@ -401,7 +411,7 @@ void *mm_malloc(size_t sz) {
 	
 	// pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
 	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
-	printf("block_size: %d\n", target_sb->block_size);
+	printf("block_size: %d\n", (int)target_sb->block_size);
 	printf("block_map[0]: %hhu\n", target_sb->block_map[0]);
 	printf("block_map[1]: %hhu\n", target_sb->block_map[1]);
 	printf("block_map[2]: %hhu\n", target_sb->block_map[2]);
@@ -423,7 +433,7 @@ void mm_free(void *ptr) {
 	// Freeing for large blocks
 	if(type) {
 		node* block = (node*)page;
-		if(!free_large(page, block->cpu_id)) {
+		if(!free_large(ptr, block->cpu_id)) {
 			printf("Error occurred when freeing large block at %p.\n", ptr);
 		}
 		return;
@@ -442,7 +452,7 @@ void mm_free(void *ptr) {
 	sb->block_map[block_id/8] -= pow(2, block_id % 8);
 	
 	// Book-keeping variables
-	float old_percent = sb->used_blocks / (SB_SIZE / sb->block_size);
+	float old_percent = (float)sb->used_blocks / (float)(SB_SIZE / sb->block_size);
 	int old_fullness = (int)(old_percent * FULLNESS_DENOMINATOR) + 1;
 	for(SID = 0; SID < 9; SID++) {
 		if(sb->block_size <= block_sizes[SID]) break;
@@ -451,7 +461,7 @@ void mm_free(void *ptr) {
 	heap_table[HID]->used -= sb->block_size;
 	
 	// Update fullness bins
-	float new_percent = sb->used_blocks / (SB_SIZE / sb->block_size);
+	float new_percent = (float)sb->used_blocks / (float)(SB_SIZE / sb->block_size);
 	int new_fullness = (int)(new_percent * FULLNESS_DENOMINATOR) + 1;
 	if(new_fullness != old_fullness) {
 		int origin[3] = {HID, SID, old_fullness};
@@ -503,12 +513,12 @@ void mm_free(void *ptr) {
 
 int mm_init(void) {
 	if (!mem_init()) {
-		// need to reflect changes in this code (from metadata struct design to embedded metadata design)
 		void * sblock;
 		int num_cpu = getNumProcessors();
 		int pg_size = mem_pagesize();
-		heap_table = (heap **) dseg_lo;
-		heap ** c_heap_table;
+		heap_table = (heap **) mem_sbrk(pg_size);
+		//heap_table = (heap **) dseg_lo;
+		//heap ** c_heap_table;
 		heap* curr_heap;
 		large_malloc_table = (node *) (heap_table + num_cpu + 1);
 
@@ -516,21 +526,15 @@ int mm_init(void) {
 		for (i = 0; i <= num_cpu; i++) {
 			sblock = mem_sbrk(pg_size);
 			curr_heap = (heap *) sblock;
-			c_heap_table = heap_table + i;
-			*c_heap_table = curr_heap;
+			heap_table[i] = curr_heap;
+			//c_heap_table = heap_table + i;
+			//*c_heap_table = curr_heap;
+			curr_heap->allocated = 0;
+			curr_heap->used = 0;
 			pthread_mutex_init(&curr_heap->lock, NULL);
+			memset(curr_heap->bin_first, 0, sizeof(superblock*) * 9 * NUM_BINS);
 		}
 		memset(large_malloc_table, 0, sizeof(node) * num_cpu);
-
 	}
-	// use mem_init to initialize
-	// create an array containing a heap for each thread
-	// for each heap, initialize bin_first to null pointers of length NUM_BINS (superblocks will only be added to heaps using these bins)
-	// (there's no longer a need to allocate a first superblock for meta_first)
-	
-	// consider having a bin for each block size * NUM_BINS
-	
-	// we should now have 9 heaps, each with just empty bins
-	
 	return 0;
 }

@@ -50,6 +50,7 @@ struct superblock {
 typedef struct {
 	int type;					// Indicator that this is a large block (set to 1)
 	int num_pages;
+	int cpu_id;
 	void * next;
 } node;
 
@@ -208,6 +209,7 @@ void *malloc_large(size_t sz, int cpu_id) {
 	lm_cpu->next = new;
 	new->type = 1;
 	new->num_pages = num_pages;
+	new->cpu_id = cpu_id;
 	new->next = NULL;
 
 	return (new + 1);
@@ -216,7 +218,8 @@ void *malloc_large(size_t sz, int cpu_id) {
 // return 1 if freed, else 0
 int free_large(void *ptr, int cpu_id) {
 	node * lm_cpu = large_malloc_table + cpu_id;
-	while (lm_cpu->next != NULL && lm_cpu->next != (ptr + sizeof(node))){
+	
+	while (lm_cpu->next != NULL && lm_cpu->next != ptr){
 		lm_cpu = lm_cpu->next;
 	}
 
@@ -245,7 +248,7 @@ int free_large(void *ptr, int cpu_id) {
 		heap_table[0]->bin_first[0][0]->prev = prev;
 	}
 	prev->next = heap_table[0]->bin_first[0][0];
-	heap_table[0]->bin_first[0][0]->next = free_sb[0];
+	heap_table[0]->bin_first[0][0] = free_sb[0];
 
 	lm_cpu->next = ((node *) lm_cpu->next)->next;
 	return 1;
@@ -402,7 +405,6 @@ void *mm_malloc(size_t sz) {
 }
 
 void mm_free(void *ptr) {
-	int cpu_id = get_cpuid();
 	int SID, HID;			// size_id and heap_id
 	
 	// Move up to page border to read header data
@@ -412,7 +414,11 @@ void mm_free(void *ptr) {
 	
 	// Freeing for large blocks
 	if(type) {
-		if (free_large(page, cpu_id)) return;
+		node* block = (node*)page;
+		if(!free_large(page, block->cpu_id)) {
+			printf("Error occurred when freeing large block at %p.\n", ptr);
+		}
+		return;
 	}
 	
 	// Get the superblock data and deallocate it from the superblock

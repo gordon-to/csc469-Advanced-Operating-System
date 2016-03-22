@@ -33,10 +33,12 @@ int main() {
 		printf("%d\n", (int) *(d+i));
 	}
 	*/
-
+	
+	printf("Free request at %p\n", a);
 	mm_free(a);
-	printf("%d\n", *a);
+	printf("Free request at %p\n", b);
 	mm_free(b);
+	printf("Free request at %p\n", d);
 	mm_free(d);
 
 

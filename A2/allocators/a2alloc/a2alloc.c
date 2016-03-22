@@ -348,8 +348,8 @@ void *mm_malloc(size_t sz) {
 				superblock* next = target_sb->next;
 				target_sb = new_superblock(target_sb, size_class);
 				target_sb->next = next;
-				printf("Take empty bin from global heap:\n");
-				printf("bin %d: address %p\n", i, heap_table[0]->bin_first[i][0]);
+				// printf("Take empty bin from global heap:\n");
+				// printf("bin %d: address %p\n", i, heap_table[0]->bin_first[i][0]);
 				break;
 			}
 		}
@@ -360,7 +360,7 @@ void *mm_malloc(size_t sz) {
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 1;
-			printf("Take almost empty bin from global heap.\n");
+			// printf("Take almost empty bin from global heap.\n");
 		}
 		
 		// If there literally were no blocks, we'll have to sbrk for one
@@ -380,7 +380,7 @@ void *mm_malloc(size_t sz) {
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 0;
-			printf("sbrk for new space.\n");
+			// printf("sbrk for new space.\n");
 		}
 		
 		// Move the superblock to the appropriate heap's bin_first
@@ -423,6 +423,7 @@ void *mm_malloc(size_t sz) {
 		transfer_bins(target_sb, origin, destination);
 	}
 	
+	/*
 	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
 	printf("block_size: %d\n", (int)target_sb->block_size);
 	printf("block_map[0]: %hhu\n", target_sb->block_map[0]);
@@ -432,6 +433,7 @@ void *mm_malloc(size_t sz) {
 	printf("heap_id: %d\n", target_sb->heap_id);
 	printf("prev: %p\n", target_sb->prev);
 	printf("next: %p\n\n", target_sb->next);
+	*/
 	
 	pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
 	
@@ -462,7 +464,7 @@ void mm_free(void *ptr) {
 	
 	// Updating block map
 	int block_id = offset / sb->block_size;
-	printf("Free: block_id = %d (status: %d)\n", block_id, (sb->block_map[block_id/8] >> (block_id % 8)) % 2);
+	// printf("Free: block_id = %d (status: %d)\n\n", block_id, ((unsigned char)sb->block_map[block_id/8] >> (block_id % 8)) % 2);
 	sb->block_map[block_id/8] -= pow(2, block_id % 8);
 	
 	// Book-keeping variables

@@ -8,7 +8,7 @@ INCLUDES = .
 # the code for this assignment is located.
 #TOPDIR=$(HOME)/469/a2
 
-all: a2alloc.o libmmutil main
+all: a2alloc.o libmmutil main test2
 
 debug: libmmutil_dbg
 
@@ -42,9 +42,12 @@ libmmutil_dbg: memlib_dbg.o tsc_dbg.o mm_thread_dbg.o
 
 main:
 	gcc -Wall -g -o main test.c a2alloc.o tsc.o mm_thread.o memlib.o -lm
+	
+test2:
+	gcc -Wall -g -o test2 test2.c a2alloc.o tsc.o mm_thread.o memlib.o -lm -lpthread
 
 a2alloc.o:
 	cd ../; make debug
 
 clean:
-	rm -f *.o *.a *~ main
+	rm -f *.o *.a *~ main test2

@@ -289,7 +289,7 @@ void *mm_malloc(size_t sz) {
 			break;
 		}
 	}
-	// pthread_mutex_lock(&heap_table[cpu_id+1]->lock);
+	pthread_mutex_lock(&heap_table[cpu_id+1]->lock);
 	
 	// Find a fairly full superblock with the appropriate block_size
 	// Go from nearly full bin to empty bin
@@ -363,9 +363,7 @@ void *mm_malloc(size_t sz) {
 		
 		// If there literally were no blocks, we'll have to sbrk for one
 		if(!target_sb) {
-			pthread_mutex_lock(&sbrk_lock);
 			void* tmp = mem_sbrk(mem_pagesize());
-			pthread_mutex_unlock(&sbrk_lock);
 			if(!tmp) {
 				// No more space!
 				printf("Error: No more space in heap.");
@@ -423,7 +421,7 @@ void *mm_malloc(size_t sz) {
 		transfer_bins(target_sb, origin, destination);
 	}
 	
-	// pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
+	pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
 	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
 	printf("block_size: %d\n", (int)target_sb->block_size);
 	printf("block_map[0]: %hhu\n", target_sb->block_map[0]);
@@ -456,9 +454,7 @@ void mm_free(void *ptr) {
 	// Get the superblock data and deallocate it from the superblock
 	superblock* sb = (superblock*)page;
 	HID = sb->heap_id;
-	if(HID == 0){
-		pthread_mutex_lock(&heap_table[HID]->lock);
-	}
+	pthread_mutex_lock(&heap_table[HID]->lock);
 	
 	// Updating block map
 	int block_id = offset / sb->block_size;
@@ -522,7 +518,7 @@ void mm_free(void *ptr) {
 		transfer_bins(target_sb, origin, destination);
 	}
 	
-	// pthread_mutex_unlock(&heap_table[HID]->lock);
+	pthread_mutex_unlock(&heap_table[HID]->lock);
 }
 
 int mm_init(void) {

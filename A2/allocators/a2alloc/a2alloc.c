@@ -76,10 +76,8 @@ pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
 	FUNCTIONS START
 *******************************/
 
-/* Creates a superblock at the given address and returns the pointer to it.
-   ASSUMES the superblock will be going into the global heap, otherwise you are
-   required to change the heap_id after. */
-superblock *new_superblock(void* ptr, size_t block_size) {
+/* Creates a superblock at the given address and returns the pointer to it. */
+superblock *new_superblock(void* ptr, size_t block_size, int heap_id) {
 	superblock* new_sb = (superblock*)ptr;
 	
 	new_sb->type = 0;
@@ -97,10 +95,10 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 			new_sb->block_map[0] = 255;
 			new_sb->block_map[1] = (char)pow(2, blocks_used % 8) - 1;
 		}
-		heap_table[0]->used += blocks_used * new_sb->block_size;
+		heap_table[heap_id]->used += blocks_used * new_sb->block_size;
 	}
 	
-	new_sb->heap_id = 0;
+	new_sb->heap_id = heap_id;
 	new_sb->prev = NULL;
 	new_sb->next = NULL;
 
@@ -371,6 +369,8 @@ void *mm_malloc(size_t sz) {
 		// check all of heap 0's empty bins
 		for(i = 0; i < 9; i++) {
 			if(heap_table[0]->bin_first[i][0]) {
+				// printf("Take empty bin from global heap:\n");
+				// printf("bin %d: address %p\n", i, heap_table[0]->bin_first[i][0]);
 				target_sb = heap_table[0]->bin_first[i][0];
 				origin[0] = 0;
 				origin[1] = i;
@@ -378,25 +378,26 @@ void *mm_malloc(size_t sz) {
 				
 				// Reset the superblock (but keep it in the same bin)
 				superblock* next = target_sb->next;
-				target_sb = new_superblock(target_sb, size_class);
+				heap_table[0]->used -= target_sb->used_blocks * target_sb->block_size;
+				target_sb = new_superblock(target_sb, size_class, 0);
 				target_sb->next = next;
-				// printf("Take empty bin from global heap:\n");
-				// printf("bin %d: address %p\n", i, heap_table[0]->bin_first[i][0]);
 				break;
 			}
 		}
 		
 		// check heap 0's bin 1 for size_id (25% bin)
 		if(!target_sb && heap_table[0]->bin_first[size_id][1]) {
+			// printf("Take almost empty bin from global heap.\n");
 			target_sb = heap_table[0]->bin_first[size_id][1];
 			origin[0] = 0;
 			origin[1] = size_id;
 			origin[2] = 1;
-			// printf("Take almost empty bin from global heap.\n");
 		}
 		
 		// If there literally were no blocks, we'll have to sbrk for one
 		if(!target_sb) {
+			pthread_mutex_unlock(&heap_table[0]->lock);
+			// printf("sbrk for new space.\n");
 			pthread_mutex_lock(&sbrk_lock);
 			void* tmp = mem_sbrk(pg_size);
 			pthread_mutex_unlock(&sbrk_lock);
@@ -407,21 +408,18 @@ void *mm_malloc(size_t sz) {
 			}
 			
 			// Initialize the superblock
-			target_sb = new_superblock(tmp, size_class);
-			// For compatibility, we'll slot it into the global heap temporarily
-			heap_table[0]->bin_first[size_id][0] = target_sb;
-			heap_table[0]->allocated += SB_SIZE;
-			origin[0] = 0;
-			origin[1] = size_id;
-			origin[2] = 0;
-			// printf("sbrk for new space.\n");
+			target_sb = new_superblock(tmp, size_class, cpu_id + 1);
+			// Slot the superblock into the heap
+			heap_table[cpu_id+1]->bin_first[size_id][0] = target_sb;
+			heap_table[cpu_id+1]->allocated += SB_SIZE;
+			old_fullness = 0;
+		} else {
+			// Move the superblock to the appropriate heap's bin_first
+			int destination[3] = {cpu_id+1, size_id, 1};
+			transfer_bins(target_sb, origin, destination);
+			old_fullness = 1;
+			pthread_mutex_unlock(&heap_table[0]->lock);
 		}
-		
-		// Move the superblock to the appropriate heap's bin_first
-		int destination[3] = {cpu_id+1, size_id, 1};
-		transfer_bins(target_sb, origin, destination);
-		old_fullness = 1;
-		pthread_mutex_unlock(&heap_table[0]->lock);
 	}
 		
 	// Now that we have our superblock, get a free block

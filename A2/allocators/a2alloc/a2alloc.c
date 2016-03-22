@@ -90,10 +90,10 @@ superblock *new_superblock(void* ptr, size_t block_size) {
 		new_sb->used_blocks = blocks_used;
 		
 		if(blocks_used <= 8) {
-			new_sb->block_map[0] = (int)pow(2, blocks_used) - 1;
+			new_sb->block_map[0] = (char)pow(2, blocks_used) - 1;
 		} else {
 			new_sb->block_map[0] = 255;
-			new_sb->block_map[1] = (int)pow(2, blocks_used % 8) - 1;
+			new_sb->block_map[1] = (char)pow(2, blocks_used % 8) - 1;
 		}
 	}
 	
@@ -158,9 +158,9 @@ int find_block(char* block_map, size_t block_size) {
 	
 	// Else, iterate through as many block_maps as necessary
 	for(j = 0; j < num_chars; j++) {
-		if(block_map[j] < 256) {
+		if(block_map[j] < 255) {
 			for(k = 0; k < 8; k++) {
-				if(!block_map[j] % (int)pow(2, k)) {
+				if(!((block_map[j] >> k) % 2)) {
 					// Block at bit k is free
 					return j * 8 + k;
 				}
@@ -401,6 +401,14 @@ void *mm_malloc(size_t sz) {
 	
 	// pthread_mutex_unlock(&heap_table[cpu_id+1]->lock);
 	printf("Malloc: Allocated address %p; size = %d\n", block, (int)size_class);
+	printf("block_size: %d\n", target_sb->block_size);
+	printf("block_map[0]: %hhu\n", target_sb->block_map[0]);
+	printf("block_map[1]: %hhu\n", target_sb->block_map[1]);
+	printf("block_map[2]: %hhu\n", target_sb->block_map[2]);
+	printf("used_blocks: %d\n", target_sb->used_blocks);
+	printf("heap_id: %d\n", target_sb->heap_id);
+	printf("prev: %p\n", target_sb->prev);
+	printf("next: %p\n\n", target_sb->next);
 	return block;
 }
 
@@ -430,8 +438,7 @@ void mm_free(void *ptr) {
 	
 	// Updating block map
 	int block_id = offset / sb->block_size;
-	printf("Free: block_id = %d\n", block_id);			// debug
-	printf("block_map[block_id/8] = %02x\n", sb->block_map[block_id/8]);
+	printf("Free: block_id = %d (status: %d)\n", block_id, (sb->block_map[block_id/8] >> (block_id % 8)) % 2);
 	sb->block_map[block_id/8] -= pow(2, block_id % 8);
 	
 	// Book-keeping variables

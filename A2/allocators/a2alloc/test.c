@@ -18,12 +18,12 @@ int main() {
 	b = mm_malloc(4 * 20);
 
 	*a = 4;
-	printf("%d\n", *a);
+	//printf("%d\n", *a);
 
 	int i;
 	for (i = 0; i < 20; i++) {
 		b[i] = i;
-		printf("%d\n", b[i]);
+		//printf("%d\n", b[i]);
 	}
 
 	memset(d, 1431655765, 750);

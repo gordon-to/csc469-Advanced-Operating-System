@@ -237,6 +237,14 @@ int free_large(void *ptr, int cpu_id) {
 		lm_cpu = lm_cpu->next;
 	}
 
+	char lo = 0;
+
+	// if global needs to be changed
+	if (lm_cpu == large_malloc_table + cpu_id) {
+		pthread_mutex_lock(&lm_lock);
+		lo = 1;
+	}
+
 	if (lm_cpu->next == NULL) return 0;
 
 	int pg_size = mem_pagesize();
@@ -265,6 +273,10 @@ int free_large(void *ptr, int cpu_id) {
 	heap_table[0]->bin_first[0][0] = free_sb[0];
 
 	lm_cpu->next = ((node *) lm_cpu->next)->next;
+
+	if (lo) {
+		pthread_mutex_unlock(&lm_lock);
+	}
 	return 1;
 }
 

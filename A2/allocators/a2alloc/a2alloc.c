@@ -9,7 +9,7 @@
 
 name_t myname = {
 	/* team name to be displayed on webpage */
-	"tbd",
+	"anyname",
 	/* Full name of first team member */
 	"Harris Fok",
 	/* Email address of first team member */

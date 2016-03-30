@@ -1,0 +1,24 @@
+
+This file briefly describes the other files in this directory.
+
+A3.tgz - The A3 distribution, including source files for the chat server and
+         skeleton for the chat client.  This is the only file you need to 
+	 extract to your own directory.
+
+check_submission.sh - A shell script that takes the name of your a3.tgz
+	submission file, and checks to make sure that the submitted files
+        will correctly build the chat client binaries with the original
+	Makefile and defs.h file.  Output is ether:
+	"Your submission compiled without errors." if everything is ok, or
+	"Your submission will not compile." followed by a list of errors.
+
+build.tgz - Used by check_submission.sh, this file contains the Makefile 
+	and defs.h that are used to build the chat client from your
+	submitted files.  If check_submission.sh reports a problem, you
+	can extract these files yourself and use them to help correct
+	the problem(s).
+
+chatserver.log - The output log from the public chat server.  When you 
+	start using the public server, you may find messages in the log
+	file can help you with debugging.
+

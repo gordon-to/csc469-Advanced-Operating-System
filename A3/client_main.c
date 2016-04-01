@@ -244,6 +244,29 @@ int create_receiver()
 	return 0;
 }
 
+/* Open a new tcp connection to the server. Returns fd. */
+int connect_tcp() {
+	int sockfd;
+	
+	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		perror("Socket creation failed");
+		exit(1);
+	}
+	
+	if(connect(sockfd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0) {
+		// How come I have to cast this... ^ as struct sockaddr*?
+		perror("TCP connection failed");
+	}
+	
+	return sockfd;
+}
+
+/* This function is to be used when we detect that the server has gone down, and
+   attempts to reconnect to a new server. Note that if we're not using the
+   location server that we don't have any alternatives to connect to. */
+void reconnect() {
+	return;
+}
 
 /*********************************************************************/
 
@@ -298,6 +321,12 @@ int init_client()
 	 *
 	 * YOUR CODE HERE
 	 */
+	 
+	struct hostent* server = NULL;
+	if(!(server = gethostbyname(server_host_name))) {
+		fprintf(stderr,"ERROR, no such host as %s\n", server_host_name);
+		exit(1);
+	}
 
 #ifdef USE_LOCN_SERVER
 
@@ -308,20 +337,33 @@ int init_client()
 #endif
  
 	/* 1. initialization to allow TCP-based control messages to chat server */
-
+	memset((char*)&server_tcp_addr, 0, sizeof(server_tcp_addr));
+	server_tcp_addr.sin_family = AF_INET;
+	server_tcp_addr.sin_port = htons(server_tcp_port);
+	memcpy((char*)&server_tcp_addr.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
 
 	/* 2. initialization to allow UDP-based chat messages to chat server */
-
-
+	if((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("Socket creation failed");
+		exit(1);
+	}
+	
+	memset((char*)&server_udp_addr, 0, sizeof(server_udp_addr));
+	server_udp_addr.sin_family = AF_INET;
+	server_udp_addr.sin_port = htons(server_udp_port);
+	memcpy((char*)&server_udp_addr.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
+	
 	/* 3. spawn receiver process - see create_receiver() in this file. */
-
+	if(create_receiver() < 0) {
+		perror("Error creating receiver");
+	}
 
 	/* 4. register with chat server */
+	if(handle_register_req() < 0) {
+		perror("Server registration failed.");
+	}
     
-
-
 	return 0;
-
 }
 
 
@@ -509,11 +551,13 @@ int main(int argc, char **argv)
 		}
 	}
 
+	/*
 	//REMOVE ME
 	printf("Header sizes:\n");
 	printf("control_msghdr: %lu bytes\n",sizeof(struct control_msghdr));
 	printf("chat_msghdr: %lu bytes\n",sizeof(struct chat_msghdr));
 	printf("register_msgdata: %lu bytes\n",sizeof(struct register_msgdata));
+	*/
 #ifdef USE_LOCN_SERVER
 
 	printf("Using location server to retrieve chatserver information\n");

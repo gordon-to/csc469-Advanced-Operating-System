@@ -296,7 +296,8 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	struct control_msghdr* temp = (struct control_msghdr*)buf;
 	
 	// Initialize our local control message struct and begin writing to it
-	struct control_msghdr* res = malloc(ntohs(temp->msg_len));
+	struct control_msghdr* res = malloc(ntohs(temp->msg_len) + 1);
+	memset(res, 0, ntohs(temp->msg_len) + 1);
 	
 	res->msg_type = temp->msg_type;
 	res->member_id = temp->member_id;
@@ -305,7 +306,9 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	
 	// Get payload if necessary
 	if(ntohs(res->msg_len) > sizeof(struct control_msghdr)) {
-		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr);
+		// For some reason, msg_len's from the server don't include nulls at the
+		// end of the string
+		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr) + 1;
 		if(read(sockfd, (char*)res->msgdata, data_len) < 0) {
 			perror("Error reading from TCP socket");
 		}
@@ -413,7 +416,9 @@ int handle_switch_room_req(char *room_name)
 				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
 	
-	if(ntohs(res->msg_type) != SWITCH_ROOM_SUCC) {
+	if(ntohs(res->msg_type) == SWITCH_ROOM_SUCC) {
+		printf("Successfully switched to room \"%s\".\n", room_name);
+	} else {
 		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
 		close(sockfd);
@@ -432,7 +437,9 @@ int handle_create_room_req(char *room_name)
 				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
 	
-	if(ntohs(res->msg_type) != CREATE_ROOM_SUCC) {
+	if(ntohs(res->msg_type) == CREATE_ROOM_SUCC) {
+		printf("Successfully created room \"%s\".\n", room_name);
+	} else {
 		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
 		close(sockfd);
@@ -462,20 +469,23 @@ int init_client()
 	 *
 	 * YOUR CODE HERE
 	 */
-	 
-	struct hostent* server = NULL;
-	if(!(server = gethostbyname(server_host_name))) {
-		fprintf(stderr,"ERROR, no such host as %s\n", server_host_name);
-		exit(1);
-	}
 
 #ifdef USE_LOCN_SERVER
 
 	/* 0. Get server host name, port numbers from location server.
 	 *    See retrieve_chatserver_info() in client_util.c
 	 */
+	
+	retrieve_chatserver_info(server_host_name, &server_tcp_port, &server_udp_port);
+	printf("Attempting to connect to %s...\n", server_host_name);
 
 #endif
+	
+	struct hostent* server = NULL;
+	if(!(server = gethostbyname(server_host_name))) {
+		fprintf(stderr,"ERROR, no such host as %s\n", server_host_name);
+		exit(1);
+	}
  
 	/* 1. initialization to allow TCP-based control messages to chat server */
 	memset((char*)&server_tcp_addr, 0, sizeof(server_tcp_addr));

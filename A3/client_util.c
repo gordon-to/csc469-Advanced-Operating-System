@@ -92,8 +92,31 @@ int retrieve_chatserver_info(char *chatserver_name, u_int16_t *tcp_port, u_int16
 	 * 1. Set up TCP connection to web server "www.cdf.toronto.edu", 
 	 *    port 80 
 	 */
-
-	/**** YOUR CODE HERE ****/
+	
+	// Set up socket
+	if((locn_socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		perror("Socket creation failed");
+		exit(1);
+	}
+	
+	// Resolve host
+	struct sockaddr_in locnserver_addr;
+	struct hostent* server = NULL;
+	if(!(server = gethostbyname("www.cdf.toronto.edu"))) {
+		fprintf(stderr,"Error resolving location server host name.\n");
+		exit(1);
+	}
+	
+	// Setup server address
+	memset((char*)&locnserver_addr, 0, sizeof(locnserver_addr));
+	locnserver_addr.sin_family = AF_INET;
+	locnserver_addr.sin_port = htons(80);
+	memcpy((char*)&locnserver_addr.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
+	
+	// Connect
+	if(connect(locn_socket_fd, (struct sockaddr*)&locnserver_addr, sizeof(locnserver_addr)) < 0) {
+		perror("TCP connection failed");
+	}
 
 	/* The code you write should initialize locn_socket_fd so that
 	 * it is valid for the write() in the next step.
@@ -123,9 +146,20 @@ int retrieve_chatserver_info(char *chatserver_name, u_int16_t *tcp_port, u_int16
 	 */
 	sscanf(buf, "%*s %d%n", &code, &n);
 
-
-	/**** YOUR CODE HERE ****/
-
+	if(code == 200) {
+		// We are given a chat server to connect to
+		char* body = skip_http_headers(buf);
+		char delim[] = " ";
+		
+		strncpy(chatserver_name, strtok(body, delim), MAX_HOST_NAME_LEN);
+		*tcp_port = (u_int16_t)strtol(strtok(NULL, delim), NULL, 10);
+		*udp_port = (u_int16_t)strtol(strtok(NULL, delim), NULL, 10);
+		// printf("%s, %d, %d\n", chatserver_name, *tcp_port, *udp_port);
+	} else {
+		// Request failed
+		printf("Request to location server failed, status: %d%s\n", code, strtok(buf, (char*)"\n") + n);
+		exit(1);
+	}
 
 	/* 5. Clean up after ourselves and return. */
 

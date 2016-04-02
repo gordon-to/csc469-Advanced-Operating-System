@@ -414,7 +414,7 @@ int handle_switch_room_req(char *room_name)
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
 	
 	if(ntohs(res->msg_type) != SWITCH_ROOM_SUCC) {
-		printf("Room creation failed.\n");
+		printf("Room switch failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
 		close(sockfd);
 		return -1;

@@ -387,19 +387,60 @@ int handle_room_list_req()
 
 int handle_member_list_req(char *room_name)
 {
-
+	int sockfd = connect_tcp();
+	send_ctrl_msg(sockfd, MEMBER_LIST_REQUEST, room_name,
+				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	if(ntohs(res->msg_type) == MEMBER_LIST_SUCC) {
+		printf("Members: \n");
+		printf("%s\n", (char*)res->msgdata);
+	} else {
+		printf("Member list failed.\n");
+		printf("Reason: %s\n", (char*)res->msgdata);
+		close(sockfd);
+		return -1;
+	}
+	
+	free(res);
+	close(sockfd);
 	return 0;
 }
 
 int handle_switch_room_req(char *room_name)
 {
-
+	int sockfd = connect_tcp();
+	send_ctrl_msg(sockfd, SWITCH_ROOM_REQUEST, room_name,
+				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	
+	if(ntohs(res->msg_type) != SWITCH_ROOM_SUCC) {
+		printf("Room creation failed.\n");
+		printf("Reason: %s\n", (char*)res->msgdata);
+		close(sockfd);
+		return -1;
+	}
+	
+	free(res);
+	close(sockfd);
 	return 0;
 }
 
 int handle_create_room_req(char *room_name)
 {
-
+	int sockfd = connect_tcp();
+	send_ctrl_msg(sockfd, CREATE_ROOM_REQUEST, room_name,
+				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	
+	if(ntohs(res->msg_type) != CREATE_ROOM_SUCC) {
+		printf("Room creation failed.\n");
+		printf("Reason: %s\n", (char*)res->msgdata);
+		close(sockfd);
+		return -1;
+	}
+	
+	free(res);
+	close(sockfd);
 	return 0;
 }
 
@@ -407,20 +448,8 @@ int handle_create_room_req(char *room_name)
 int handle_quit_req()
 {
 	int sockfd = connect_tcp();
+	send_ctrl_msg(sockfd, QUIT_REQUEST, NULL, sizeof(struct control_msghdr));
 	
-	// Create and send the request
-	struct control_msghdr* cmh;
-	char* buf = (char*)malloc(128);
-	memset(buf, 0, 128);
-	
-	cmh = (struct control_msghdr*)buf;
-	cmh->msg_type = htons(QUIT_REQUEST);
-	cmh->member_id = htons(member_id);
-	cmh->msg_len = sizeof(struct control_msghdr);
-	
-	write(sockfd, buf, cmh->msg_len);
-
-	close(sockfd);
 	shutdown_clean();
 	return 0;
 }

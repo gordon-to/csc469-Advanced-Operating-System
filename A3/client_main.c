@@ -296,7 +296,7 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	struct control_msghdr* temp = (struct control_msghdr*)buf;
 	
 	// Initialize our local control message struct and begin writing to it
-	struct control_msghdr* res = malloc(ntohs(temp->msg_len));
+	struct control_msghdr* res = malloc(ntohs(temp->msg_len) + 1);
 	
 	res->msg_type = temp->msg_type;
 	res->member_id = temp->member_id;
@@ -305,7 +305,9 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	
 	// Get payload if necessary
 	if(ntohs(res->msg_len) > sizeof(struct control_msghdr)) {
-		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr);
+		// For some reason, msg_len's from the server don't include nulls at the
+		// end of the string
+		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr) + 1;
 		if(read(sockfd, (char*)res->msgdata, data_len) < 0) {
 			perror("Error reading from TCP socket");
 		}
@@ -413,8 +415,10 @@ int handle_switch_room_req(char *room_name)
 				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
 	
-	if(ntohs(res->msg_type) != SWITCH_ROOM_SUCC) {
-		printf("Room switch failed.\n");
+	if(ntohs(res->msg_type) == SWITCH_ROOM_SUCC) {
+		printf("Successfully switched to room \"%s\".\n", room_name);
+	} else {
+		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
 		close(sockfd);
 		return -1;
@@ -432,7 +436,9 @@ int handle_create_room_req(char *room_name)
 				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
 	
-	if(ntohs(res->msg_type) != CREATE_ROOM_SUCC) {
+	if(ntohs(res->msg_type) == CREATE_ROOM_SUCC) {
+		printf("Successfully created room \"%s\".\n", room_name);
+	} else {
 		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
 		close(sockfd);

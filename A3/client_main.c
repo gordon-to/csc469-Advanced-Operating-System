@@ -61,10 +61,6 @@ int ctrl2rcvr_qid;
  */
 #define MAX_MSGDATA (MAX_MSG_LEN - sizeof(struct chat_msghdr))
 
-/* This is the port our client will use. Make sure you don't use this port when
-   you run the server */
-#define DESIRED_CLIENT_PORT 1548
-
 /************* FUNCTION DEFINITIONS ***********/
 
 static void usage(char **argv) {
@@ -491,7 +487,7 @@ int init_client()
 
 	/* 2. initialization to allow UDP-based chat messages to chat server */
 	if((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("Socket creation failed");
+		perror("Socket creation failed\n");
 		exit(1);
 	}
 	
@@ -501,14 +497,14 @@ int init_client()
 	memcpy((char*)&server_udp_addr.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
 	
 	/* 3. spawn receiver process - see create_receiver() in this file. */
-	/*
 	if(create_receiver() < 0) {
-		perror("Error creating receiver");
+		perror("Error creating receiver\n");
 	}
-	*/
+	
 
 	/* 4. register with chat server */
-	if(handle_register_req(DESIRED_CLIENT_PORT) < 0) {
+	if(handle_register_req(client_udp_port) < 0) {
+		perror("Unable to register chat server\n");
 		exit(1);
 	}
     

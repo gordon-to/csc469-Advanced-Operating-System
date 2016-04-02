@@ -20,7 +20,10 @@
 
 #include "client.h"
 
+#define PORT_START 7000
+
 static char *option_string = "f:";
+int udp_socket_fd;
 
 /* For communication with chat client control process */
 int ctrl2rcvr_qid;
@@ -93,14 +96,40 @@ void init_receiver()
 	/**** YOUR CODE TO FILL IMPLEMENT STEPS 2 AND 3 ****/
 
 	/* 2. Initialize UDP socket for receiving chat messages. */
+	struct sockaddr_in server_udp_addr;
+	if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("Socket creation failed\n");
+		exit(1);
+	}
+	
+	// number of retries of ports
+	int num_port_retry = 200;
+
+	int port_serv = PORT_START;
+	memset((char*)&server_udp_addr, 0, sizeof(server_udp_addr));
+	server_udp_addr.sin_family = AF_INET; // IPv4
+	server_udp_addr.sin_port = htons(port_serv);
+	server_udp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	// start from port 7000, keep trying until free port up num_port_retry retries
+	while ((bind(udp_socket_fd, (struct sockaddr *) &server_udp_addr, sizeof(server_udp_addr))) < 0) {
+		if (port_serv > PORT_START + num_port_retry) {
+			perror("Port binding failed\n");
+			send_error(ctrl2rcvr_qid, 503); // send error 503 service unavailable
+			exit(1);
+		}
+		port_serv += 1;
+		server_udp_addr.sin_port = htons(port_serv);
+	}
 
 	/* 3. Tell parent the port number if successful, or failure code if not. 
 	 *    Use the send_error and send_ok functions
 	 */
 
+	// socket binded to a port
+	send_ok(ctrl2rcvr_qid, port_serv);
+
 }
-
-
 
 
 /* Function to deal with a single message from the chat server */
@@ -135,10 +164,26 @@ void receive_msgs()
 
 
 	/**** YOUR CODE HERE ****/
+	int result;
+	msg_t msg;
 
 	while(TRUE) {
 
-		/**** YOUR CODE HERE ****/
+		/**** YOUR CODE HERE ****/;
+		// check if parent has msg
+		result = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), CTRL_TYPE, IPC_NOWAIT);
+		if (result > 0) {
+		// parent has msg
+			if (msg.body.status == CHAT_QUIT) {
+				// break to cleanup
+				break;
+			}
+		}
+
+		// Get udp msg
+		if (recvfrom(udp_socket_fd, buf, MAX_MSG_LEN, 0, NULL, 0) >= 0) {
+			handle_received_msg(buf);
+		}
 
 	}
 

@@ -292,6 +292,8 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	memset(buf, 0, 8);
 	if(read(sockfd, buf, 8) < 0) {
 		perror("Error reading from TCP socket");
+		free(buf);
+		return NULL;
 	}
 	struct control_msghdr* temp = (struct control_msghdr*)buf;
 	
@@ -311,6 +313,8 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr) + 1;
 		if(read(sockfd, (char*)res->msgdata, data_len) < 0) {
 			perror("Error reading from TCP socket");
+			free(res);
+			return NULL;
 		}
 	}
 	
@@ -346,19 +350,24 @@ int handle_register_req(int port)
 	
 	// Wait for the server's response and get the member ID
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	close(sockfd);
 	
 	// Handle the response
-	if(ntohs(res->msg_type) == REGISTER_SUCC) {
+	if(!res) {
+		// Something went wrong
+		printf("Server registration failed!\n");
+		return -1;
+	} else if(ntohs(res->msg_type) == REGISTER_SUCC) {
+		printf("Successfully registered at %s\n", server_host_name);
 		member_id = ntohs(res->member_id);
 	} else {
 		printf("Server registration failed!\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
-		close(sockfd);
+		free(res);
 		return -1;
 	}
 	
 	free(res);
-	close(sockfd);
 	return 0;
 }
 

@@ -497,6 +497,7 @@ int handle_quit_req()
 		close(sockfd);
 	}
 	
+	printf("Shutting down...\n");
 	shutdown_clean();
 	return 0;
 }
@@ -633,17 +634,15 @@ void handle_chatmsg_input(char *inputdata)
 	bzero(buf, totalsize);
 
 	/**** YOUR CODE HERE ****/
-	u_int16_t size = strlen(inputdata);
-	memcpy(buf + sizeof(struct chat_msghdr), inputdata, size);
-
+	u_int16_t size = strlen(inputdata) + sizeof(struct chat_msghdr);
 	struct chat_msghdr *msg = (struct chat_msghdr *) buf;
-	memcpy(&msg->sender.member_name, &member_name, MAX_MEMBER_NAME_LEN);
+	
 	msg->sender.member_id = htons(member_id);
 	msg->msg_len = htons(size);
+	strncpy((char*)msg->msgdata, inputdata, MAX_MSG_LEN);
 
 	// send to udp server
-	if(sendto(udp_socket_fd, buf, strlen(buf), 0,
-			  (struct sockaddr*)&server_udp_addr, udp_addr_len) < 0) {
+	if(sendto(udp_socket_fd, buf, size, 0, (struct sockaddr*)&server_udp_addr, udp_addr_len) < 0) {
 		perror("Sending message failed");
 	}
 	free(buf);

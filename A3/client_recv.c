@@ -143,8 +143,8 @@ void handle_received_msg(char *buf)
 	struct chat_msghdr * msg_head = (struct chat_msghdr *) buf;
 	
 	// Print msg
-	printf("%s::\n", msg_head->sender.member_name);
-	printf("%.*s\n", ntohs(msg_head->msg_len), buf + sizeof(struct chat_msghdr));
+	printf("%s: ", msg_head->sender.member_name);
+	printf("%.*s", ntohs(msg_head->msg_len) - sizeof(struct chat_msghdr), (char*)msg_head->msgdata);
 
 
 }
@@ -178,7 +178,6 @@ void receive_msgs()
 	while(TRUE) {
 
 		/**** YOUR CODE HERE ****/;
-		sleep(1);
 		// check if parent has msg
 		result = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), CTRL_TYPE, IPC_NOWAIT);
 		if (result > 0) {
@@ -195,7 +194,7 @@ void receive_msgs()
 		if (recv(udp_socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
 			handle_received_msg(buf);
 		}
-
+		usleep(10000);
 	}
 
 	/* Cleanup */
@@ -228,6 +227,7 @@ int main(int argc, char **argv) {
 	printf("Receiver options ok... initializing\n");
 
 	init_receiver();
+	sleep(1);
 
 	receive_msgs();
 

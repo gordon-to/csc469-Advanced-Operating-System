@@ -138,6 +138,9 @@ void handle_received_msg(char *buf)
 {
 
 	/**** YOUR CODE HERE ****/
+	struct chat_msghdr * msg_head = (struct chat_msghdr *) buf;
+	(void)(msg_head); // remove warning
+
 
 }
 
@@ -181,7 +184,7 @@ void receive_msgs()
 		}
 
 		// Get udp msg
-		if (recvfrom(udp_socket_fd, buf, MAX_MSG_LEN, 0, NULL, 0) >= 0) {
+		if (recv(udp_socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
 			handle_received_msg(buf);
 		}
 

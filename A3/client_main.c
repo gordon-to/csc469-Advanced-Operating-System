@@ -28,6 +28,7 @@
 /*************** GLOBAL VARIABLES ******************/
 
 static char *option_string = "h:t:u:n:";
+int cmh_size;
 
 /* For communication with chat server */
 /* These variables provide some extra clues about what you will need to
@@ -55,6 +56,12 @@ u_int16_t member_id = 0;
 pid_t receiver_pid;
 char ctrl2rcvr_fname[MAX_FILE_NAME_LEN];
 int ctrl2rcvr_qid;
+
+/* For reconnection when the server has failed */
+#define MAX_RETRIES 5
+int retries = MAX_RETRIES;
+char receiver_opened = 0;
+char last_channel[MAX_ROOM_NAME_LEN];
 
 /* MAX_MSG_LEN is maximum size of a message, including header+body.
  * We define the maximum size of the msgdata field based on this.
@@ -277,8 +284,8 @@ void send_ctrl_msg(int sockfd, int type, char* data, int msg_len) {
 	cmh->msg_len = htons(msg_len);
 	
 	// Add the payload if necessary
-	if(msg_len > sizeof(struct control_msghdr)) {
-		strncpy((char*)cmh->msgdata, data, msg_len - sizeof(struct control_msghdr));
+	if(msg_len > cmh_size) {
+		strncpy((char*)cmh->msgdata, data, msg_len - cmh_size);
 	}
 	
 	write(sockfd, buf, cmh->msg_len);
@@ -307,10 +314,10 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	free(buf);
 	
 	// Get payload if necessary
-	if(ntohs(res->msg_len) > sizeof(struct control_msghdr)) {
+	if(ntohs(res->msg_len) > cmh_size) {
 		// For some reason, msg_len's from the server don't include nulls at the
 		// end of the string
-		int data_len = ntohs(res->msg_len) - sizeof(struct control_msghdr) + 1;
+		int data_len = ntohs(res->msg_len) - cmh_size + 1;
 		if(read(sockfd, (char*)res->msgdata, data_len) < 0) {
 			perror("Error reading from TCP socket");
 			free(res);
@@ -319,13 +326,6 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 	}
 	
 	return res;	
-}
-
-/* This function is to be used when we detect that the server has gone down, and
-   attempts to reconnect to a new server. Note that if we're not using the
-   location server that we don't have any alternatives to connect to. */
-void reconnect() {
-	return;
 }
 
 /*********************************************************************/
@@ -346,7 +346,7 @@ int handle_register_req(int port)
 	rmd->udp_port = htons(port);
 	strncpy((char*)rmd->member_name, member_name, MAX_MEMBER_NAME_LEN);
 	send_ctrl_msg(sockfd, REGISTER_REQUEST, (char*)rmd,
-				  sizeof(struct control_msghdr) + sizeof(struct register_msgdata) + strlen(member_name) + 1);
+				  cmh_size + sizeof(struct register_msgdata) + strlen(member_name) + 1);
 	
 	// Wait for the server's response and get the member ID
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
@@ -360,6 +360,7 @@ int handle_register_req(int port)
 	} else if(ntohs(res->msg_type) == REGISTER_SUCC) {
 		printf("Successfully registered at %s\n", server_host_name);
 		member_id = ntohs(res->member_id);
+		retries = MAX_RETRIES;
 	} else {
 		printf("Server registration failed!\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
@@ -376,10 +377,11 @@ int handle_room_list_req()
 	int sockfd = connect_tcp();
 	
 	// Call send_ctrl_msg to send the request
-	send_ctrl_msg(sockfd, ROOM_LIST_REQUEST, NULL, sizeof(struct control_msghdr));
+	send_ctrl_msg(sockfd, ROOM_LIST_REQUEST, NULL, cmh_size);
 	
 	// Wait for the server's response and get the header information
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	close(sockfd);
 	
 	// Handle the response
 	if(ntohs(res->msg_type) == ROOM_LIST_SUCC) {
@@ -388,12 +390,11 @@ int handle_room_list_req()
 	} else {
 		printf("Room list failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
-		close(sockfd);
+		free(res);
 		return -1;
 	}
 	
 	free(res);
-	close(sockfd);
 	return 0;
 }
 
@@ -401,20 +402,21 @@ int handle_member_list_req(char *room_name)
 {
 	int sockfd = connect_tcp();
 	send_ctrl_msg(sockfd, MEMBER_LIST_REQUEST, room_name,
-				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+				  cmh_size + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	close(sockfd);
+	
 	if(ntohs(res->msg_type) == MEMBER_LIST_SUCC) {
 		printf("Members: \n");
 		printf("%s\n", (char*)res->msgdata);
 	} else {
 		printf("Member list failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
-		close(sockfd);
+		free(res);
 		return -1;
 	}
 	
 	free(res);
-	close(sockfd);
 	return 0;
 }
 
@@ -422,20 +424,21 @@ int handle_switch_room_req(char *room_name)
 {
 	int sockfd = connect_tcp();
 	send_ctrl_msg(sockfd, SWITCH_ROOM_REQUEST, room_name,
-				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+				  cmh_size + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	close(sockfd);
 	
 	if(ntohs(res->msg_type) == SWITCH_ROOM_SUCC) {
 		printf("Successfully switched to room \"%s\".\n", room_name);
+		strcpy(last_channel, room_name);
 	} else {
 		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
-		close(sockfd);
+		free(res);
 		return -1;
 	}
 	
 	free(res);
-	close(sockfd);
 	return 0;
 }
 
@@ -443,20 +446,20 @@ int handle_create_room_req(char *room_name)
 {
 	int sockfd = connect_tcp();
 	send_ctrl_msg(sockfd, CREATE_ROOM_REQUEST, room_name,
-				  sizeof(struct control_msghdr) + strlen(room_name) + 1);
+				  cmh_size + strlen(room_name) + 1);
 	struct control_msghdr* res = receive_ctrl_msg(sockfd);
+	close(sockfd);
 	
 	if(ntohs(res->msg_type) == CREATE_ROOM_SUCC) {
 		printf("Successfully created room \"%s\".\n", room_name);
 	} else {
 		printf("Room creation failed.\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
-		close(sockfd);
+		free(res);
 		return -1;
 	}
 	
 	free(res);
-	close(sockfd);
 	return 0;
 }
 
@@ -464,7 +467,8 @@ int handle_create_room_req(char *room_name)
 int handle_quit_req()
 {
 	int sockfd = connect_tcp();
-	send_ctrl_msg(sockfd, QUIT_REQUEST, NULL, sizeof(struct control_msghdr));
+	send_ctrl_msg(sockfd, QUIT_REQUEST, NULL, cmh_size);
+	close(sockfd);
 	
 	shutdown_clean();
 	return 0;
@@ -514,11 +518,14 @@ int init_client()
 	memcpy((char*)&server_udp_addr.sin_addr.s_addr, (char*)server->h_addr, server->h_length);
 	
 	/* 3. spawn receiver process - see create_receiver() in this file. */
+	if(!receiver_opened) {
 	/*
 	if(create_receiver() < 0) {
 		perror("Error creating receiver");
 	}
 	*/
+		receiver_opened = 1;
+	}
 
 	/* 4. register with chat server */
 	if(handle_register_req(DESIRED_CLIENT_PORT) < 0) {
@@ -526,6 +533,31 @@ int init_client()
 	}
     
 	return 0;
+}
+
+/* This function is to be used when we detect that the server has gone down, and
+   attempts to reconnect to a new server. Note that if we're not using the
+   location server that we don't have any alternatives to connect to. */
+void reconnect() {
+	if(retries != 0) {
+		// Attempt to reconnect by reinitializing all connections
+		printf("Reconnecting to server...");
+		if(retries > 0) {
+			printf(" Attempts remaining: %d.\n", retries);
+		}
+		
+		close(udp_socket_fd);
+		init_client();
+		
+		if(retries > 0) {
+			retries--;
+		}
+	} else {
+		printf("Server connection failed. Exiting now.\n");
+		shutdown_clean();
+	}
+	
+	return;
 }
 
 
@@ -713,10 +745,11 @@ int main(int argc, char **argv)
 		}
 	}
 
+	cmh_size = sizeof(struct control_msghdr);
 	/*
 	//REMOVE ME
 	printf("Header sizes:\n");
-	printf("control_msghdr: %lu bytes\n",sizeof(struct control_msghdr));
+	printf("control_msghdr: %lu bytes\n",sizeof(ustruct control_msghdr));
 	printf("chat_msghdr: %lu bytes\n",sizeof(struct chat_msghdr));
 	printf("register_msgdata: %lu bytes\n",sizeof(struct register_msgdata));
 	*/

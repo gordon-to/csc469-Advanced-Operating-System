@@ -99,6 +99,7 @@ void init_receiver()
 	struct sockaddr_in server_udp_addr;
 	if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("Socket creation failed\n");
+		send_error(ctrl2rcvr_qid, SOCKET_FAILED);
 		exit(1);
 	}
 	
@@ -115,7 +116,7 @@ void init_receiver()
 	while ((bind(udp_socket_fd, (struct sockaddr *) &server_udp_addr, sizeof(server_udp_addr))) < 0) {
 		if (port_serv > PORT_START + num_port_retry) {
 			perror("Port binding failed\n");
-			send_error(ctrl2rcvr_qid, 503); // send error 503 service unavailable
+			send_error(ctrl2rcvr_qid, BIND_FAILED); // send error 503 service unavailable
 			exit(1);
 		}
 		port_serv += 1;
@@ -126,7 +127,7 @@ void init_receiver()
 	 *    Use the send_error and send_ok functions
 	 */
 
-	// socket binded to a port
+	// send socket binded to a port
 	send_ok(ctrl2rcvr_qid, port_serv);
 
 }
@@ -140,6 +141,8 @@ void handle_received_msg(char *buf)
 	/**** YOUR CODE HERE ****/
 	struct chat_msghdr * msg_head = (struct chat_msghdr *) buf;
 	(void)(msg_head); // remove warning
+	// relay msg to client main
+
 
 
 }

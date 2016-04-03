@@ -620,6 +620,7 @@ void handle_chatmsg_input(char *inputdata)
 	 * struct and send the chat message to the chat server.
 	 */
 
+	
 	int totalsize = MAX_MSG_LEN + sizeof(struct chat_msghdr);
 	char *buf = (char *)malloc(totalsize);
   

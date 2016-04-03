@@ -143,7 +143,7 @@ void handle_received_msg(char *buf)
 	
 	// Print msg
 	printf("%s::\n", msg_head->sender.member_name);
-	printf("%.*s\n", msg_head->msg_len, *msg_head->msgdata);
+	printf("%.*s\n", msg_head->msg_len, buf + sizeof(struct chat_msghdr));
 
 
 }

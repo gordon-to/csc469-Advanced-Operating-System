@@ -140,9 +140,10 @@ void handle_received_msg(char *buf)
 
 	/**** YOUR CODE HERE ****/
 	struct chat_msghdr * msg_head = (struct chat_msghdr *) buf;
-	(void)(msg_head); // remove warning
-	// relay msg to client main
-
+	
+	// Print msg
+	printf("%s::\n", msg_head->sender.member_name);
+	printf("%.*s\n", msg_head->msg_len, *msg_head->msgdata);
 
 
 }
@@ -198,7 +199,6 @@ void receive_msgs()
 
 	/* Cleanup */
 	free(buf);
-	close(udp_socket_fd);
 	return;
 }
 

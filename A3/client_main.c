@@ -28,6 +28,7 @@
 /*************** GLOBAL VARIABLES ******************/
 
 static char *option_string = "h:t:u:n:";
+int udp_addr_len;
 
 /* For communication with chat server */
 /* These variables provide some extra clues about what you will need to
@@ -487,7 +488,7 @@ int init_client()
 
 	/* 2. initialization to allow UDP-based chat messages to chat server */
 	if((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("Socket creation failed\n");
+		perror("Socket creation failed");
 		exit(1);
 	}
 	
@@ -498,13 +499,13 @@ int init_client()
 	
 	/* 3. spawn receiver process - see create_receiver() in this file. */
 	if(create_receiver() < 0) {
-		perror("Error creating receiver\n");
+		perror("Error creating receiver");
 	}
 	
 
 	/* 4. register with chat server */
 	if(handle_register_req(client_udp_port) < 0) {
-		perror("Unable to register chat server\n");
+		perror("Unable to register chat server");
 		exit(1);
 	}
     
@@ -532,7 +533,11 @@ void handle_chatmsg_input(char *inputdata)
 
 
 	/**** YOUR CODE HERE ****/
-
+	strcpy(buf, inputdata);
+	if(sendto(udp_socket_fd, buf, strlen(buf), 0,
+			  (struct sockaddr*)&server_udp_addr, udp_addr_len) < 0) {
+		perror("Sending message failed");
+	}
 
 	free(buf);
 	return;
@@ -720,6 +725,7 @@ int main(int argc, char **argv)
 
 #endif /* USE_LOCN_SERVER */
 
+	udp_addr_len = sizeof(server_udp_addr);
 	init_client();
 
 	get_user_input();

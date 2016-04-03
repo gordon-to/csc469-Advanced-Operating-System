@@ -96,9 +96,9 @@ void init_receiver()
 	/**** YOUR CODE TO FILL IMPLEMENT STEPS 2 AND 3 ****/
 
 	/* 2. Initialize UDP socket for receiving chat messages. */
-	struct sockaddr_in server_udp_addr;
+	struct sockaddr_in client_udp_addr;
 	if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("Socket creation failed\n");
+		perror("Socket creation failed");
 		send_error(ctrl2rcvr_qid, SOCKET_FAILED);
 		exit(1);
 	}
@@ -107,20 +107,20 @@ void init_receiver()
 	int num_port_retry = 200;
 
 	int port_serv = PORT_START;
-	memset((char*)&server_udp_addr, 0, sizeof(server_udp_addr));
-	server_udp_addr.sin_family = AF_INET; // IPv4
-	server_udp_addr.sin_port = htons(port_serv);
-	server_udp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	memset((char*)&client_udp_addr, 0, sizeof(client_udp_addr));
+	client_udp_addr.sin_family = AF_INET; // IPv4
+	client_udp_addr.sin_port = htons(port_serv);
+	client_udp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	// start from port 7000, keep trying until free port up num_port_retry retries
-	while ((bind(udp_socket_fd, (struct sockaddr *) &server_udp_addr, sizeof(server_udp_addr))) < 0) {
+	while ((bind(udp_socket_fd, (struct sockaddr *) &client_udp_addr, sizeof(client_udp_addr))) < 0) {
 		if (port_serv > PORT_START + num_port_retry) {
-			perror("Port binding failed\n");
+			perror("Port binding failed");
 			send_error(ctrl2rcvr_qid, BIND_FAILED); // send error 503 service unavailable
 			exit(1);
 		}
 		port_serv += 1;
-		server_udp_addr.sin_port = htons(port_serv);
+		client_udp_addr.sin_port = htons(port_serv);
 	}
 
 	/* 3. Tell parent the port number if successful, or failure code if not. 

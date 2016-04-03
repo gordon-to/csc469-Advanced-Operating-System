@@ -620,7 +620,8 @@ void handle_chatmsg_input(char *inputdata)
 	 * struct and send the chat message to the chat server.
 	 */
 
-	char *buf = (char *)malloc(MAX_MSG_LEN);
+	int totalsize = MAX_MSG_LEN + sizeof(struct chat_msghdr);
+	char *buf = (char *)malloc(totalsize);
   
 	if (buf == 0) {
 		printf("Could not malloc memory for message buffer\n");
@@ -628,15 +629,19 @@ void handle_chatmsg_input(char *inputdata)
 		exit(1);
 	}
 
-	bzero(buf, MAX_MSG_LEN);
-
+	bzero(buf, totalsize);
 
 	/**** YOUR CODE HERE ****/
-	strcpy(buf, inputdata);
-	if(sendto(udp_socket_fd, buf, strlen(buf), 0,
-			  (struct sockaddr*)&server_udp_addr, udp_addr_len) < 0) {
-		perror("Sending message failed");
-	}
+	u_int16_t size = strlen(inputdata);
+	memcpy(buf + sizeof(struct chat_msghdr), inputdata, size);
+
+	struct chat_msghdr *msg = (struct chat_msghdr *) buf;
+	memcpy(&msg->sender.member_name, &member_name, MAX_MEMBER_NAME_LEN);
+	msg->sender.member_id = member_id;
+	msg->msg_len = size;
+
+	// send to udp server
+	sendto(udp_socket_fd, buf, totalsize, 0, (struct sockaddr *) &server_udp_addr, sizeof(server_udp_addr));
 
 	free(buf);
 	return;

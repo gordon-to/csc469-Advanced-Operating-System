@@ -642,8 +642,10 @@ void handle_chatmsg_input(char *inputdata)
 	msg->msg_len = size;
 
 	// send to udp server
-	sendto(udp_socket_fd, buf, totalsize, 0, (struct sockaddr *) &server_udp_addr, sizeof(server_udp_addr));
-
+	if(sendto(udp_socket_fd, buf, strlen(buf), 0,
+			  (struct sockaddr*)&server_udp_addr, udp_addr_len) < 0) {
+		perror("Sending message failed");
+	}
 	free(buf);
 	return;
 }

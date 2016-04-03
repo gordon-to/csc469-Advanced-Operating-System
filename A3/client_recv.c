@@ -192,6 +192,7 @@ void receive_msgs()
 
 	/* Cleanup */
 	free(buf);
+	close(udp_socket_fd);
 	return;
 }
 

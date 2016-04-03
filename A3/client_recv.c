@@ -177,6 +177,7 @@ void receive_msgs()
 	while(TRUE) {
 
 		/**** YOUR CODE HERE ****/;
+		sleep(1);
 		// check if parent has msg
 		result = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), CTRL_TYPE, IPC_NOWAIT);
 		if (result > 0) {
@@ -193,7 +194,6 @@ void receive_msgs()
 		if (recv(udp_socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
 			handle_received_msg(buf);
 		}
-		sleep(1);
 
 	}
 

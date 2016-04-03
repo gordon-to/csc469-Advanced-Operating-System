@@ -620,7 +620,7 @@ void handle_chatmsg_input(char *inputdata)
 	 * struct and send the chat message to the chat server.
 	 */
 
-	
+
 	int totalsize = MAX_MSG_LEN + sizeof(struct chat_msghdr);
 	char *buf = (char *)malloc(totalsize);
   
@@ -638,8 +638,8 @@ void handle_chatmsg_input(char *inputdata)
 
 	struct chat_msghdr *msg = (struct chat_msghdr *) buf;
 	memcpy(&msg->sender.member_name, &member_name, MAX_MEMBER_NAME_LEN);
-	msg->sender.member_id = member_id;
-	msg->msg_len = size;
+	msg->sender.member_id = htons(member_id);
+	msg->msg_len = htons(size);
 
 	// send to udp server
 	if(sendto(udp_socket_fd, buf, strlen(buf), 0,

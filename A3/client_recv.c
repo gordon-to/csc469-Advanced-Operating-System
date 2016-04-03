@@ -139,11 +139,12 @@ void handle_received_msg(char *buf)
 {
 
 	/**** YOUR CODE HERE ****/
+
 	struct chat_msghdr * msg_head = (struct chat_msghdr *) buf;
 	
 	// Print msg
 	printf("%s::\n", msg_head->sender.member_name);
-	printf("%.*s\n", msg_head->msg_len, buf + sizeof(struct chat_msghdr));
+	printf("%.*s\n", ntohs(msg_head->msg_len), buf + sizeof(struct chat_msghdr));
 
 
 }

@@ -179,7 +179,7 @@ void receive_msgs()
 
 		/**** YOUR CODE HERE ****/;
 		// check if parent has msg
-		result = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), CTRL_TYPE, IPC_NOWAIT);
+		result = msgrcv(ctrl2rcvr_qid, &msg, sizeof(struct body_s), RECV_TYPE, IPC_NOWAIT);
 		if (result > 0) {
 		// parent has msg
 			if (msg.body.status == CHAT_QUIT) {
@@ -199,6 +199,7 @@ void receive_msgs()
 
 	/* Cleanup */
 	free(buf);
+	close(udp_socket_fd);
 	return;
 }
 

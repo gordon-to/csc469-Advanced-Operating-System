@@ -634,7 +634,7 @@ void handle_chatmsg_input(char *inputdata)
 	bzero(buf, totalsize);
 
 	/**** YOUR CODE HERE ****/
-	u_int16_t size = strlen(inputdata) + sizeof(struct chat_msghdr);
+	u_int16_t size = strlen(inputdata) + sizeof(struct chat_msghdr) + 1;
 	struct chat_msghdr *msg = (struct chat_msghdr *) buf;
 	
 	msg->sender.member_id = htons(member_id);

@@ -134,6 +134,7 @@ int retrieve_chatserver_info(char *chatserver_name, u_int16_t *tcp_port, u_int16
 	/* 3. Read reply from web server */
 
 	read(locn_socket_fd, buf, MAX_MSG_LEN);
+	close(locn_socket_fd);
 
 	/* 
 	 * 4. Check if request succeeded.  If so, skip headers and initialize

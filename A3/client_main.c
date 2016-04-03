@@ -639,7 +639,7 @@ void handle_chatmsg_input(char *inputdata)
 	struct chat_msghdr *msg = (struct chat_msghdr *) buf;
 	memcpy(&msg->sender.member_name, &member_name, MAX_MEMBER_NAME_LEN);
 	msg->sender.member_id = htons(member_id);
-	msg->msg_len = htons(size);
+	msg->msg_len = htons(totalsize);
 
 	// send to udp server
 	if(sendto(udp_socket_fd, buf, strlen(buf), 0,

@@ -181,12 +181,15 @@ void receive_msgs()
 				// break to cleanup
 				break;
 			}
+		} else if (result != -1 && errno == ENOMSG) {
+			perror("msgrcv error");
 		}
 
 		// Get udp msg
 		if (recv(udp_socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
 			handle_received_msg(buf);
 		}
+		sleep(1);
 
 	}
 

@@ -23,7 +23,7 @@
 #define PORT_START 7000
 
 static char *option_string = "f:";
-int udp_socket_fd;
+int socket_fd;
 
 /* For communication with chat client control process */
 int ctrl2rcvr_qid;
@@ -97,7 +97,7 @@ void init_receiver()
 
 	/* 2. Initialize UDP socket for receiving chat messages. */
 	struct sockaddr_in client_udp_addr;
-	if ((udp_socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("Socket creation failed");
 		send_error(ctrl2rcvr_qid, SOCKET_FAILED);
 		exit(1);
@@ -113,7 +113,7 @@ void init_receiver()
 	client_udp_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	// start from port 7000, keep trying until free port up num_port_retry retries
-	while ((bind(udp_socket_fd, (struct sockaddr *) &client_udp_addr, sizeof(client_udp_addr))) < 0) {
+	while ((bind(socket_fd, (struct sockaddr *) &client_udp_addr, sizeof(client_udp_addr))) < 0) {
 		if (port_serv > PORT_START + num_port_retry) {
 			perror("Port binding failed");
 			send_error(ctrl2rcvr_qid, BIND_FAILED); // send error 503 service unavailable
@@ -191,7 +191,7 @@ void receive_msgs()
 		}
 
 		// Get udp msg
-		if (recv(udp_socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
+		if (recv(socket_fd, buf, MAX_MSG_LEN, MSG_DONTWAIT) > 0) {
 			handle_received_msg(buf);
 		}
 		usleep(10000);
@@ -199,7 +199,7 @@ void receive_msgs()
 
 	/* Cleanup */
 	free(buf);
-	close(udp_socket_fd);
+	close(socket_fd);
 	return;
 }
 

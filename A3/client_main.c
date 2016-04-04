@@ -59,8 +59,9 @@ char ctrl2rcvr_fname[MAX_FILE_NAME_LEN];
 int ctrl2rcvr_qid;
 
 /* For reconnection when the server has failed */
-#define MAX_RETRIES 5
+#define MAX_RETRIES 5		// Number of reconnect retries
 int connect_retries = MAX_RETRIES;
+#define TCP_RETRIES 5		// Number of TCP request retries
 char receiver_opened = 0;
 char last_channel[MAX_ROOM_NAME_LEN];
 
@@ -292,39 +293,44 @@ void send_ctrl_msg(int sockfd, int type, char* data, int msg_len) {
 
 /* Receive and parse the response from the server */
 struct control_msghdr* receive_ctrl_msg(int sockfd) {
-	// First, read the header info
-	char* buf = malloc(8);
-	memset(buf, 0, 8);
-	if(read(sockfd, buf, 8) < 0) {
-		perror("Error reading from TCP socket");
+	char* buf = malloc(MAX_MSG_LEN);
+	memset(buf, 0, MAX_MSG_LEN);
+	
+	if(read(sockfd, buf, MAX_MSG_LEN) < 0) {
+		// perror("Error reading from TCP socket");
 		free(buf);
 		return NULL;
 	}
-	struct control_msghdr* temp = (struct control_msghdr*)buf;
 	
-	// Initialize our local control message struct and begin writing to it
-	struct control_msghdr* res = malloc(ntohs(temp->msg_len) + 1);
-	memset(res, 0, ntohs(temp->msg_len) + 1);
+	return (struct control_msghdr*)buf;
+}
+
+/* Make attempts to send a TCP request to the servers. */
+struct control_msghdr* attempt_request(int type, char* data, int msg_len) {
+	struct control_msghdr* res = NULL;
+	int attempts = TCP_RETRIES;
 	
-	res->msg_type = temp->msg_type;
-	res->member_id = temp->member_id;
-	res->msg_len = temp->msg_len;
-	free(buf);
-	
-	// Get payload if necessary
-	if(ntohs(res->msg_len) > cmh_size) {
-		// For some reason, msg_len's from the server don't include nulls at the
-		// end of the string
-		int data_len = ntohs(res->msg_len) - cmh_size + 1;
-		if(read(sockfd, (char*)res->msgdata, data_len) < 0) {
-			perror("Error reading from TCP socket");
-			free(res);
+	// Place everything in a retry loop until we get a proper response from
+	// those darned buggy servers
+	while(!res && attempts > 0) {
+		int sockfd = connect_tcp();
+		if(sockfd == -1) {
+			// Connection failed
 			return NULL;
 		}
+		
+		// Call send_ctrl_msg to send the request
+		send_ctrl_msg(sockfd, type, data, msg_len);
+		
+		// Wait for the server's response and get the header information
+		res = receive_ctrl_msg(sockfd);
+		close(sockfd);
+		attempts--;
 	}
 	
-	return res;	
+	return res;
 }
+	
 
 /*********************************************************************/
 
@@ -336,27 +342,20 @@ struct control_msghdr* receive_ctrl_msg(int sockfd) {
 
 int handle_register_req(int port)
 {
-	int sockfd = connect_tcp();
-	if(sockfd == -1) {
-		return -2;
-	}
-	
 	// Create the registration data and send the request
 	struct register_msgdata* rmd = malloc(sizeof(struct register_msgdata) + MAX_MEMBER_NAME_LEN);
 	
 	rmd->udp_port = htons(port);
 	strncpy((char*)rmd->member_name, member_name, MAX_MEMBER_NAME_LEN);
-	send_ctrl_msg(sockfd, REGISTER_REQUEST, (char*)rmd,
-				  cmh_size + sizeof(struct register_msgdata) + strlen(member_name) + 1);
+	int size = cmh_size + sizeof(struct register_msgdata) + strlen(member_name) + 1;
 	
-	// Wait for the server's response and get the member ID
-	struct control_msghdr* res = receive_ctrl_msg(sockfd);
-	close(sockfd);
+	// Use attempt_request() to perform multiple attempts in case of failure
+	struct control_msghdr* res = attempt_request(REGISTER_REQUEST, (char*)rmd, size);
 	
 	// Handle the response
 	if(!res) {
 		// Something went wrong
-		printf("Disconnected.\n");
+		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == REGISTER_SUCC) {
 		printf("Successfully registered at %s\n", server_host_name);
@@ -374,22 +373,13 @@ int handle_register_req(int port)
 
 int handle_room_list_req()
 {
-	int sockfd = connect_tcp();
-	if(sockfd == -1) {
-		return -2;
-	}
-	
-	// Call send_ctrl_msg to send the request
-	send_ctrl_msg(sockfd, ROOM_LIST_REQUEST, NULL, cmh_size);
-	
-	// Wait for the server's response and get the header information
-	struct control_msghdr* res = receive_ctrl_msg(sockfd);
-	close(sockfd);
+	// Make the request to the server
+	struct control_msghdr* res = attempt_request(ROOM_LIST_REQUEST, NULL, cmh_size);
 	
 	// Handle the response
 	if(!res) {
 		// Something went wrong
-		printf("Disconnected.\n");
+		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == ROOM_LIST_SUCC) {
 		printf("Rooms: \n");
@@ -407,17 +397,11 @@ int handle_room_list_req()
 
 int handle_member_list_req(char *room_name)
 {
-	int sockfd = connect_tcp();
-	if(sockfd == -1) {
-		return -2;
-	}
-	send_ctrl_msg(sockfd, MEMBER_LIST_REQUEST, room_name,
-				  cmh_size + strlen(room_name) + 1);
-	struct control_msghdr* res = receive_ctrl_msg(sockfd);
-	close(sockfd);
+	struct control_msghdr* res = attempt_request(MEMBER_LIST_REQUEST, room_name,
+					  						cmh_size + strlen(room_name) + 1);
 	
 	if(!res) {
-		printf("Disconnected.\n");
+		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == MEMBER_LIST_SUCC) {
 		printf("Members: \n");
@@ -435,21 +419,15 @@ int handle_member_list_req(char *room_name)
 
 int handle_switch_room_req(char *room_name)
 {
-	int sockfd = connect_tcp();
-	if(sockfd == -1) {
-		return -2;
-	}
-	send_ctrl_msg(sockfd, SWITCH_ROOM_REQUEST, room_name,
-				  cmh_size + strlen(room_name) + 1);
-	struct control_msghdr* res = receive_ctrl_msg(sockfd);
-	close(sockfd);
+	struct control_msghdr* res = attempt_request(SWITCH_ROOM_REQUEST, room_name,
+					  						cmh_size + strlen(room_name) + 1);
 	
 	if(!res) {
-		printf("Disconnected.\n");
+		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == SWITCH_ROOM_SUCC) {
 		printf("Successfully switched to room \"%s\".\n", room_name);
-		if(strlen(last_channel) == 0) {
+		if(strlen(last_channel) > 0) {
 			// Send a notification to the receiver
 			msg_t msg;
 			msg.mtype = RECV_TYPE;
@@ -471,17 +449,11 @@ int handle_switch_room_req(char *room_name)
 
 int handle_create_room_req(char *room_name)
 {
-	int sockfd = connect_tcp();
-	if(sockfd == -1) {
-		return -2;
-	}
-	send_ctrl_msg(sockfd, CREATE_ROOM_REQUEST, room_name,
-				  cmh_size + strlen(room_name) + 1);
-	struct control_msghdr* res = receive_ctrl_msg(sockfd);
-	close(sockfd);
+	struct control_msghdr* res = attempt_request(CREATE_ROOM_REQUEST, room_name,
+					  						cmh_size + strlen(room_name) + 1);
 	
 	if(!res) {
-		printf("Disconnected.\n");
+		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == CREATE_ROOM_SUCC) {
 		printf("Successfully created room \"%s\".\n", room_name);

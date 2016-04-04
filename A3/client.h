@@ -50,6 +50,7 @@ typedef struct msgbuf {
 #define RECV_READY    1
 #define RECV_NOTREADY 2
 #define CHAT_QUIT     3
+#define SWITCHED_CHAN 4
 
 /* Failure codes from receiver. */
 #define NO_SERVER     10

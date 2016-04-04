@@ -174,6 +174,7 @@ void receive_msgs()
 	/**** YOUR CODE HERE ****/
 	int result;
 	msg_t msg;
+	printf("Receiver started successfully\n\n");
 
 	while(TRUE) {
 
@@ -185,6 +186,8 @@ void receive_msgs()
 			if (msg.body.status == CHAT_QUIT) {
 				// break to cleanup
 				break;
+			} else if(msg.body.status == SWITCHED_CHAN) {
+				printf("---------- SWITCHED CHANNEL ----------\n\n");
 			}
 		} else if (result != -1 && errno == ENOMSG) {
 			perror("msgrcv error");

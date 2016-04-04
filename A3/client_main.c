@@ -449,6 +449,14 @@ int handle_switch_room_req(char *room_name)
 		return -2;
 	} else if(ntohs(res->msg_type) == SWITCH_ROOM_SUCC) {
 		printf("Successfully switched to room \"%s\".\n", room_name);
+		if(strlen(last_channel) == 0) {
+			// Send a notification to the receiver
+			msg_t msg;
+			msg.mtype = RECV_TYPE;
+			msg.body.status = SWITCHED_CHAN;
+			msgsnd(ctrl2rcvr_qid, &msg, sizeof(struct body_s), 0);
+		}
+		
 		strcpy(last_channel, room_name);
 	} else {
 		printf("Room switch failed.\n");
@@ -593,6 +601,7 @@ void reconnect() {
 					// Let the user know that they're not in a room
 					printf("ATTENTION: Could not rejoin previous room.\n");
 					printf("Use !r to list the new server's rooms.\n");
+					memset(last_channel, 0, MAX_ROOM_NAME_LEN);
 				} else if(result == -2) {
 					// In case we somehow disconnect instantly
 					connect_retries = MAX_RETRIES;
@@ -774,7 +783,12 @@ void get_user_input()
 			handle_command_input(&buf[1]);
       
 		} else {
-			handle_chatmsg_input(buf);
+			if(strlen(last_channel) > 0) {
+				handle_chatmsg_input(buf);
+			} else {
+				printf("Error: not connected to a channel.\n");
+				printf("Use '!s room_name' to join a channel.\n");
+			}
 		}
 	}
 

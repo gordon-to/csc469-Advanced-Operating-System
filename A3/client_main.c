@@ -580,6 +580,7 @@ int init_client()
 	/* 4. register with chat server */
 	int result = handle_register_req(client_udp_port);
 	int suffix = 1;
+	suffix_len = 3;
 	
 	// We need a while loop because of the repetitive nature of the automatic
 	// name retry system

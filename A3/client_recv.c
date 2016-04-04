@@ -144,7 +144,7 @@ void handle_received_msg(char *buf)
 	
 	// Print msg
 	printf("%s: ", msg_head->sender.member_name);
-	printf("%.*s", ntohs(msg_head->msg_len) - sizeof(struct chat_msghdr), (char*)msg_head->msgdata);
+	printf("%.*s",  (int)(ntohs(msg_head->msg_len) - sizeof(struct chat_msghdr)), (char*)msg_head->msgdata);
 
 
 }

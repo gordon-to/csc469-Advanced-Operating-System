@@ -64,6 +64,9 @@ int connect_retries = MAX_RETRIES;
 #define TCP_RETRIES 5		// Number of TCP request retries
 char receiver_opened = 0;
 char last_channel[MAX_ROOM_NAME_LEN];
+// Variables for automatic name retrying
+char suffix_appended = 0;
+int suffix_len = 3;
 
 /* MAX_MSG_LEN is maximum size of a message, including header+body.
  * We define the maximum size of the msgdata field based on this.
@@ -576,9 +579,7 @@ int init_client()
 
 	/* 4. register with chat server */
 	int result = handle_register_req(client_udp_port);
-	char suffix_appended = 0;
-	int i = 3;
-	int suffix = 2;
+	int suffix = 1;
 	
 	// We need a while loop because of the repetitive nature of the automatic
 	// name retry system
@@ -608,7 +609,7 @@ int init_client()
 					shutdown_clean();
 				}
 				strcpy(member_name + strlen(member_name) - 3, "(10)");
-				i++;
+				suffix_len++;
 			} else if(suffix > 99) {
 				// I'm just not going to deal with triple digits
 				printf("Could not re-register with a new name.\n");
@@ -616,7 +617,7 @@ int init_client()
 			}
 			
 			// Overwrite the suffix
-			sprintf(member_name + strlen(member_name) - i, "(%d)", suffix);
+			sprintf(member_name + strlen(member_name) - suffix_len, "(%d)", suffix);
 			printf("Trying again as %s\n", member_name);
 			result = handle_register_req(client_udp_port);
 			suffix++;

@@ -580,7 +580,6 @@ int init_client()
 	/* 4. register with chat server */
 	int result = handle_register_req(client_udp_port);
 	int suffix = 1;
-	suffix_len = 3;
 	
 	// We need a while loop because of the repetitive nature of the automatic
 	// name retry system
@@ -602,6 +601,9 @@ int init_client()
 				// Add the brackets for the first time
 				strcat(member_name, " (1)");
 				suffix_appended = 1;
+			} else if(suffix_len == 4 && suffix < 10) {
+				// Small compensation
+				suffix_len = 3;
 			} else if(suffix == 10) {
 				// Special case for reaching 10
 				if(strlen(member_name) + 2 > MAX_MEMBER_NAME_LEN) {

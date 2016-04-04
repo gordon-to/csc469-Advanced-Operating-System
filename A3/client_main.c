@@ -280,12 +280,23 @@ int connect_tcp() {
 	// How come I have to cast this... ^ as struct sockaddr*?
 	
 	int result = select(sockfd + 1, NULL, &set, NULL, &timeout);
-	fcntl(sockfd, F_SETFL, flags);		// Don't forget to put the socket back into blocking mode.
+	// Don't forget to put the socket back into blocking mode.
+	fcntl(sockfd, F_SETFL, flags);
 	if(result == 0) {
 		errno = ETIMEDOUT;
 		return -1;
-	} else if(result == -1) {
+	} else if(result < 0) {
 		perror("Error occurred on select");
+		return -1;
+	}
+	
+	// In case the connection failed
+	int so_error;
+	socklen_t len = sizeof(so_error);
+	
+	getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+	if (so_error != 0) {
+		errno = so_error;
 		return -1;
 	}
 	
@@ -385,6 +396,14 @@ int handle_register_req(int port)
 	} else {
 		printf("Server registration failed!\n");
 		printf("Reason: %s\n", (char*)res->msgdata);
+		
+		// Special return value for "name taken" error
+		// This assumes the error message is exactly as we expect
+		if(strncmp((char*)res->msgdata, "Name has already been used!", 10) == 0) {
+			free(res);
+			return -3;
+		}
+		
 		free(res);
 		return -1;
 	}
@@ -557,10 +576,51 @@ int init_client()
 
 	/* 4. register with chat server */
 	int result = handle_register_req(client_udp_port);
-	if(result == -1) {
-		shutdown_clean();
-	} else if(result == -2) {
-		return -2;
+	char suffix_appended = 0;
+	int i = 3;
+	int suffix = 2;
+	
+	// We need a while loop because of the repetitive nature of the automatic
+	// name retry system
+	while(result != 0) {
+		if(result == -1) {
+			// Unrecoverable registration error.
+			shutdown_clean();
+		} else if(result == -2) {
+			// Connection failed.
+			return -2;
+		} else if(result == -3) {
+			// Automatically attempt to reconnect with new name
+			if(!suffix_appended) {
+				// First time append
+				if(strlen(member_name) + 5 > MAX_MEMBER_NAME_LEN) {
+					// The name is too long and we can't append to it
+					shutdown_clean();
+				}
+				// Add the brackets for the first time
+				strcat(member_name, " (1)");
+				suffix_appended = 1;
+			} else if(suffix == 10) {
+				// Special case for reaching 10
+				if(strlen(member_name) + 2 > MAX_MEMBER_NAME_LEN) {
+					// We've reached double digits and now the name is too long
+					printf("Could not re-register with a new name.\n");
+					shutdown_clean();
+				}
+				strcpy(member_name + strlen(member_name) - 3, "(10)");
+				i++;
+			} else if(suffix > 99) {
+				// I'm just not going to deal with triple digits
+				printf("Could not re-register with a new name.\n");
+				shutdown_clean();
+			}
+			
+			// Overwrite the suffix
+			sprintf(member_name + strlen(member_name) - i, "(%d)", suffix);
+			printf("Trying again as %s\n", member_name);
+			result = handle_register_req(client_udp_port);
+			suffix++;
+		}
 	}
     
 	return 0;

@@ -254,16 +254,38 @@ int create_receiver()
 
 /* Open a new tcp connection to the server. Returns fd. */
 int connect_tcp() {
+	// For the connection, we'll use select() to define a custom timeout
 	int sockfd;
+	int flags;
+	fd_set set;
+	struct timeval timeout;
 	
+	// Create the socket
 	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Socket creation failed");
 		shutdown_clean();
 	}
 	
-	if(connect(sockfd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr)) < 0) {
-		// How come I have to cast this... ^ as struct sockaddr*?
-		perror("TCP connection failed");
+	// Get the current flags, then put the socket into non-blocking mode
+	flags = fcntl(sockfd, F_GETFL, 0);
+	fcntl(sockfd, F_SETFL, O_NONBLOCK);
+	// Set select() variables
+	FD_ZERO(&set);
+	FD_SET(sockfd, &set);
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
+	
+	// Then call connect() and select()
+	connect(sockfd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr));
+	// How come I have to cast this... ^ as struct sockaddr*?
+	
+	int result = select(sockfd + 1, &set, &set, NULL, &timeout);
+	fcntl(sockfd, F_SETFL, flags);		// Don't forget to put the socket back into blocking mode.
+	if(result == 0) {
+		errno = ETIMEDOUT;
+		return -1;
+	} else if(result == -1) {
+		perror("Error occurred on select");
 		return -1;
 	}
 	
@@ -316,6 +338,7 @@ struct control_msghdr* attempt_request(int type, char* data, int msg_len) {
 		int sockfd = connect_tcp();
 		if(sockfd == -1) {
 			// Connection failed
+			close(sockfd);
 			return NULL;
 		}
 		

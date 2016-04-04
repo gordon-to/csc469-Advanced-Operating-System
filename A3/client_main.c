@@ -279,7 +279,7 @@ int connect_tcp() {
 	connect(sockfd, (struct sockaddr*)&server_tcp_addr, sizeof(server_tcp_addr));
 	// How come I have to cast this... ^ as struct sockaddr*?
 	
-	int result = select(sockfd + 1, &set, &set, NULL, &timeout);
+	int result = select(sockfd + 1, NULL, &set, NULL, &timeout);
 	fcntl(sockfd, F_SETFL, flags);		// Don't forget to put the socket back into blocking mode.
 	if(result == 0) {
 		errno = ETIMEDOUT;
@@ -338,7 +338,6 @@ struct control_msghdr* attempt_request(int type, char* data, int msg_len) {
 		int sockfd = connect_tcp();
 		if(sockfd == -1) {
 			// Connection failed
-			close(sockfd);
 			return NULL;
 		}
 		

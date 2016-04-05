@@ -957,10 +957,9 @@ int main(int argc, char **argv)
 
 	if(pthread_create(&get_input_t, NULL, (void *)get_user_input, NULL) != 0) {
 		perror("Failed to create user input thread.");
+	} else {
+		handle_input();
 	}
-
-
-	handle_input();
 
 	pthread_exit(NULL);
 	return 0;

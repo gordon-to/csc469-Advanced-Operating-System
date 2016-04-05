@@ -844,38 +844,11 @@ void get_user_input()
 
 			ready_to_read = (char)TRUE;
 			pthread_mutex_unlock(&read_mutex);
+		} else {
+			usleep(100000);
 		}
 	}
   
-}
-
-void handle_input()
-{
-	if (ready_to_read) {
-		pthread_mutex_lock(&read_mutex);
-		// need to make sure input valid
-		char *buf =user_input_buffer;
-		/* Check if control message or chat message */
-		if (buf[0] == '!') {
-			/* buf probably ends with newline.  If so, get rid of it. */
-			int len = strlen(buf);
-			if (buf[len-1] == '\n') {
-				buf[len-1] = '\0';
-			}
-			handle_command_input(&buf[1]);
-	  
-		} else {
-			if(strlen(last_channel) > 0) {
-				handle_chatmsg_input(buf);
-			} else {
-				printf("Error: not connected to a channel.\n");
-				printf("Use '!s room_name' to join a channel.\n");
-			}
-		}
-
-		ready_to_read = (char)FALSE;
-		pthread_mutex_unlock(&read_mutex);
-	}
 }
 
 void heartbeat()
@@ -887,6 +860,45 @@ void heartbeat()
 	}
 }
 
+
+void handle_input()
+{
+	int count = 0;
+	while(TRUE){
+		if (ready_to_read) {
+			pthread_mutex_lock(&read_mutex);
+			// need to make sure input valid
+			char *buf =user_input_buffer;
+			/* Check if control message or chat message */
+			if (buf[0] == '!') {
+				/* buf probably ends with newline.  If so, get rid of it. */
+				int len = strlen(buf);
+				if (buf[len-1] == '\n') {
+					buf[len-1] = '\0';
+				}
+				handle_command_input(&buf[1]);
+		  
+			} else {
+				if(strlen(last_channel) > 0) {
+					handle_chatmsg_input(buf);
+				} else {
+					printf("Error: not connected to a channel.\n");
+					printf("Use '!s room_name' to join a channel.\n");
+				}
+			}
+
+			ready_to_read = (char)FALSE;
+			pthread_mutex_unlock(&read_mutex);
+		} else {
+			usleep(100000);
+			count += 1;
+			if (count >= 10) {
+				heartbeat();
+				count = 0;
+			}
+		}
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -947,10 +959,8 @@ int main(int argc, char **argv)
 		perror("Failed to create user input thread.");
 	}
 
-	while(TRUE)	{
-		handle_input();
-		heartbeat();
-	} 
+
+	handle_input();
 
 	pthread_exit(NULL);
 	return 0;

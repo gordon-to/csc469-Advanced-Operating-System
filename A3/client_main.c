@@ -124,8 +124,6 @@ void shutdown_clean() {
 		perror("cleanup - msgctl removal failed");
 	}
 
-	pthread_exit(NULL);
-
 	free(user_input_buffer);
 	exit(0);
 }

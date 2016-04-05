@@ -123,6 +123,7 @@ void shutdown_clean() {
 		perror("cleanup - msgctl removal failed");
 	}
 
+	free(user_input_buffer);
 	exit(0);
 }
 

@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <netinet/in.h>
 #include <netdb.h>
@@ -129,7 +130,11 @@ void shutdown_clean() {
 	exit(0);
 }
 
-
+void handle_int()
+{
+	printf("%s\n", "ctrl-c caught");
+	shutdown_clean();
+}
 
 int initialize_client_only_channel(int *qid)
 {
@@ -891,7 +896,6 @@ void handle_input()
 
 			ready_to_read = (char)FALSE;
 			pthread_mutex_unlock(&read_mutex);
-			count = 0;
 		} else {
 			usleep(10000);
 			count += 1;
@@ -948,6 +952,8 @@ int main(int argc, char **argv)
 	}
 
 #endif /* USE_LOCN_SERVER */
+
+	signal(SIGINT, handle_int);
 
 	cmh_size = sizeof(struct control_msghdr);
 	udp_addr_len = sizeof(server_udp_addr);

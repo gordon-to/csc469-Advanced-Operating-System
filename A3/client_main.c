@@ -845,7 +845,7 @@ void get_user_input()
 			ready_to_read = (char)TRUE;
 			pthread_mutex_unlock(&read_mutex);
 		} else {
-			usleep(100000);
+			usleep(10000);
 		}
 	}
   
@@ -890,9 +890,9 @@ void handle_input()
 			ready_to_read = (char)FALSE;
 			pthread_mutex_unlock(&read_mutex);
 		} else {
-			usleep(100000);
+			usleep(10000);
 			count += 1;
-			if (count >= 10) {
+			if (count >= 1000) {
 				heartbeat();
 				count = 0;
 			}

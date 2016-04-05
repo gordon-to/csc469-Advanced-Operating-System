@@ -426,7 +426,7 @@ int handle_register_req(int port)
 	return 0;
 }
 
-int handle_room_list_req(char verboose)
+int handle_room_list_req(char verbose)
 {
 	// Make the request to the server
 	struct control_msghdr* res = attempt_request(ROOM_LIST_REQUEST, NULL, cmh_size);
@@ -437,12 +437,12 @@ int handle_room_list_req(char verboose)
 		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == ROOM_LIST_SUCC) {
-		if (verboose) {
+		if (verbose) {
 			printf("Rooms: \n");
 			printf("%s\n", (char*)res->msgdata);
 		}
 	} else {
-		if (verboose){
+		if (verbose){
 			printf("Room list failed.\n");
 			printf("Reason: %s\n", (char*)res->msgdata);
 		}
@@ -827,6 +827,8 @@ void handle_command_input(char *line)
 	return;
 }
 
+/* Repurposed this function for a dedicated input thread. When input is
+   received, it gets put into user_input_buffer for the main thread to use. */
 void get_user_input()
 {
 	char *buf = user_input_buffer;
@@ -835,12 +837,12 @@ void get_user_input()
 	while(TRUE) {
 		if (!ready_to_read) {
 			pthread_mutex_lock(&read_mutex);
-
+			
+			// This thread can block on input while the main thread does its
+			// own thing
 			bzero(buf, MAX_MSGDATA);
-
-			printf("\n[%s]>  ",member_name);
-
-			result_str = fgets(buf,MAX_MSGDATA,stdin);
+			printf("\n[%s]>  ", member_name);
+			result_str = fgets(buf, MAX_MSGDATA, stdin);
 
 			if (result_str == NULL) {
 				printf("Error or EOF while reading user input.  Guess we're done.\n");
@@ -850,16 +852,18 @@ void get_user_input()
 			ready_to_read = (char)TRUE;
 			pthread_mutex_unlock(&read_mutex);
 		} else {
+			// This thread will be sleeping if the other thread is busy
+			// (ie. reconnecting)
 			usleep(10000);
 		}
 	}
   
 }
 
+/* Simple heartbeat function that checks server for aliveness */
 void heartbeat()
 {
-	int result = handle_room_list_req((char)FALSE);
-	if (result == -2) {
+	if (handle_room_list_req(0) == -2) {
 		//server error
 		reconnect();
 	}
@@ -871,9 +875,12 @@ void handle_input()
 	int count = 0;
 	while(TRUE){
 		if (ready_to_read) {
+			// The input thread has received input and is ready to pass it to us
+			
+			// Get the lock to make sure we get valid input
 			pthread_mutex_lock(&read_mutex);
-			// need to make sure input valid
-			char *buf =user_input_buffer;
+			char *buf = user_input_buffer;
+			
 			/* Check if control message or chat message */
 			if (buf[0] == '!') {
 				/* buf probably ends with newline.  If so, get rid of it. */
@@ -895,8 +902,10 @@ void handle_input()
 			ready_to_read = (char)FALSE;
 			pthread_mutex_unlock(&read_mutex);
 		} else {
+			// Else, sleep and count up for heartbeat
 			usleep(10000);
-			count += 1;
+			count++;
+			
 			if (count >= 1000) {
 				heartbeat();
 				count = 0;
@@ -907,11 +916,8 @@ void handle_input()
 
 int main(int argc, char **argv)
 {
-	pthread_t get_input_t;
-
 	char option;
-	user_input_buffer = (char *)malloc(MAX_MSGDATA);
-	ready_to_read = (char)FALSE;
+	pthread_t get_input_t;
  
 	while((option = getopt(argc, argv, option_string)) != -1) {
 		switch(option) {
@@ -956,12 +962,17 @@ int main(int argc, char **argv)
 	cmh_size = sizeof(struct control_msghdr);
 	udp_addr_len = sizeof(server_udp_addr);
 	memset(last_channel, 0, MAX_ROOM_NAME_LEN);
+
+	user_input_buffer = (char *)malloc(MAX_MSGDATA);
+	ready_to_read = (char)FALSE;
 	
 	// We get an extra reconnect attempt for our first connect.
 	if(init_client() != 0) {
 		reconnect();
 	}
 
+	// Create a new thread for input, then use handle_input() to process the
+	// incoming data
 	if(pthread_create(&get_input_t, NULL, (void *)get_user_input, NULL) != 0) {
 		perror("Failed to create user input thread.");
 	} else {

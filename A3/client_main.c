@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 /*************** GLOBAL VARIABLES ******************/
 
@@ -72,6 +73,10 @@ int suffix_len = 3;
  * We define the maximum size of the msgdata field based on this.
  */
 #define MAX_MSGDATA (MAX_MSG_LEN - sizeof(struct chat_msghdr))
+
+pthread_mutex_t read_mutex = PTHREAD_MUTEX_INITIALIZER;
+char * user_input_buffer;
+char ready_to_read;
 
 /************* FUNCTION DEFINITIONS ***********/
 
@@ -415,7 +420,7 @@ int handle_register_req(int port)
 	return 0;
 }
 
-int handle_room_list_req()
+int handle_room_list_req(char verboose)
 {
 	// Make the request to the server
 	struct control_msghdr* res = attempt_request(ROOM_LIST_REQUEST, NULL, cmh_size);
@@ -426,11 +431,15 @@ int handle_room_list_req()
 		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == ROOM_LIST_SUCC) {
-		printf("Rooms: \n");
-		printf("%s\n", (char*)res->msgdata);
+		if (verboose) {
+			printf("Rooms: \n");
+			printf("%s\n", (char*)res->msgdata);
+		}
 	} else {
-		printf("Room list failed.\n");
-		printf("Reason: %s\n", (char*)res->msgdata);
+		if (verboose){
+			printf("Room list failed.\n");
+			printf("Reason: %s\n", (char*)res->msgdata);
+		}
 		free(res);
 		return -1;
 	}
@@ -780,7 +789,7 @@ void handle_command_input(char *line)
 	switch(cmd) {
 
 	case 'r':
-		result = handle_room_list_req();
+		result = handle_room_list_req((char)TRUE);
 		break;
 
 	case 'c':
@@ -814,24 +823,38 @@ void handle_command_input(char *line)
 
 void get_user_input()
 {
-	char *buf = (char *)malloc(MAX_MSGDATA);
+	char *buf = user_input_buffer;
 	char *result_str;
 
 	while(TRUE) {
+		if (!ready_to_read) {
+			pthread_mutex_lock(&read_mutex);
 
-		bzero(buf, MAX_MSGDATA);
+			bzero(buf, MAX_MSGDATA);
 
-		printf("\n[%s]>  ",member_name);
+			printf("\n[%s]>  ",member_name);
 
-		result_str = fgets(buf,MAX_MSGDATA,stdin);
+			result_str = fgets(buf,MAX_MSGDATA,stdin);
 
-		if (result_str == NULL) {
-			printf("Error or EOF while reading user input.  Guess we're done.\n");
-			break;
+			if (result_str == NULL) {
+				printf("Error or EOF while reading user input.  Guess we're done.\n");
+				break;
+			}
+
+			ready_to_read = (char)TRUE;
+			pthread_mutex_unlock(&read_mutex);
 		}
+	}
+  
+}
 
+void handle_input()
+{
+	if (ready_to_read) {
+		pthread_mutex_lock(&read_mutex);
+		// need to make sure input valid
+		char *buf =user_input_buffer;
 		/* Check if control message or chat message */
-
 		if (buf[0] == '!') {
 			/* buf probably ends with newline.  If so, get rid of it. */
 			int len = strlen(buf);
@@ -839,7 +862,7 @@ void get_user_input()
 				buf[len-1] = '\0';
 			}
 			handle_command_input(&buf[1]);
-      
+	  
 		} else {
 			if(strlen(last_channel) > 0) {
 				handle_chatmsg_input(buf);
@@ -848,16 +871,29 @@ void get_user_input()
 				printf("Use '!s room_name' to join a channel.\n");
 			}
 		}
-	}
 
-	free(buf);
-  
+		ready_to_read = (char)FALSE;
+		pthread_mutex_unlock(&read_mutex);
+	}
+}
+
+void heartbeat()
+{
+	int result = handle_room_list_req((char)FALSE);
+	if (result == -2) {
+		//server error
+		reconnect();
+	}
 }
 
 
 int main(int argc, char **argv)
 {
+	pthread_t get_input_t;
+
 	char option;
+	user_input_buffer = (char *)malloc(MAX_MSGDATA);
+	ready_to_read = (char)FALSE;
  
 	while((option = getopt(argc, argv, option_string)) != -1) {
 		switch(option) {
@@ -906,7 +942,15 @@ int main(int argc, char **argv)
 		reconnect();
 	}
 
-	get_user_input();
+	if(pthread_create(&get_input_t, NULL, (void *)get_user_input, NULL) != 0) {
+		perror("Failed to create user input thread.");
+	}
 
+	while(TRUE)	{
+		handle_input();
+		heartbeat();
+	} 
+
+	pthread_exit(NULL);
 	return 0;
 }

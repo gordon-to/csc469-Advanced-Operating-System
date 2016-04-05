@@ -122,7 +122,7 @@ void shutdown_clean() {
 	if (msgctl(ctrl2rcvr_qid, IPC_RMID, NULL)) {
 		perror("cleanup - msgctl removal failed");
 	}
-	
+
 	pthread_exit(NULL);
 
 	free(user_input_buffer);
@@ -891,6 +891,7 @@ void handle_input()
 
 			ready_to_read = (char)FALSE;
 			pthread_mutex_unlock(&read_mutex);
+			count = 0;
 		} else {
 			usleep(10000);
 			count += 1;

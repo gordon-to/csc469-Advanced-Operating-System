@@ -63,7 +63,7 @@ int ctrl2rcvr_qid;
 /* For reconnection when the server has failed */
 #define MAX_RETRIES 5		// Number of reconnect retries
 int connect_retries = MAX_RETRIES;
-#define TCP_RETRIES 5		// Number of TCP request retries
+#define TCP_RETRIES 10		// Number of TCP request retries
 char receiver_opened = 0;
 char last_channel[MAX_ROOM_NAME_LEN];
 // Variables for automatic name retrying
@@ -373,6 +373,10 @@ struct control_msghdr* attempt_request(int type, char* data, int msg_len) {
 		res = receive_ctrl_msg(sockfd);
 		close(sockfd);
 		attempts--;
+		
+		if(!res) {
+			usleep(100000);
+		}
 	}
 	
 	return res;
@@ -867,6 +871,8 @@ void heartbeat()
 		printf("\n");
 		perror("Disconnected");
 		reconnect();
+		printf("\n[%s]>  ", member_name);
+		fflush(stdout);
 	}
 }
 

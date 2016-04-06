@@ -1,0 +1,14 @@
+Instructions for compiling and running the chat client
+
+We've modified the Makefile to include pthread. Simply run make to compile the
+chat client, then run ./chatclient with the desired options as per normal.
+
+If for some reason an automarker is being used, and you decide to use the
+default unmodified Makefile, the code won't compile! Please, please set the
+CFLAGS to the following: -Wall -g -pthread -DUSE_LOCN_SERVER , and try again.
+
+For what reason does check_submission.sh exist when no mention of it is made in
+the assignment handout, I do not know. It seems to imply that we are not allowed
+to add files and change the Makefile, but if anything, the handout suggests
+otherwise, so this is rather confusing. I refuse to accept a mark of 0 just
+because we weren't supposed to change the Makefile though.

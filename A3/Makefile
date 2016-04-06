@@ -13,7 +13,7 @@
 
 #   Don't forget to add your cdf user-ID here!
 
-NAME=
+NAME=g3yuch g5harris
 VERSION=1
 
 

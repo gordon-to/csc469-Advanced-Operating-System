@@ -426,7 +426,7 @@ int handle_register_req(int port)
 	return 0;
 }
 
-int handle_room_list_req(char verbose)
+int handle_room_list_req()
 {
 	// Make the request to the server
 	struct control_msghdr* res = attempt_request(ROOM_LIST_REQUEST, NULL, cmh_size);
@@ -437,15 +437,11 @@ int handle_room_list_req(char verbose)
 		perror("Disconnected");
 		return -2;
 	} else if(ntohs(res->msg_type) == ROOM_LIST_SUCC) {
-		if (verbose) {
-			printf("Rooms: \n");
-			printf("%s\n", (char*)res->msgdata);
-		}
+		printf("Rooms: \n");
+		printf("%s\n", (char*)res->msgdata);
 	} else {
-		if (verbose){
-			printf("Room list failed.\n");
-			printf("Reason: %s\n", (char*)res->msgdata);
-		}
+		printf("Room list failed.\n");
+		printf("Reason: %s\n", (char*)res->msgdata);
 		free(res);
 		return -1;
 	}
@@ -795,7 +791,7 @@ void handle_command_input(char *line)
 	switch(cmd) {
 
 	case 'r':
-		result = handle_room_list_req((char)TRUE);
+		result = handle_room_list_req();
 		break;
 
 	case 'c':
@@ -863,8 +859,13 @@ void get_user_input()
 /* Simple heartbeat function that checks server for aliveness */
 void heartbeat()
 {
-	if (handle_room_list_req(0) == -2) {
-		//server error
+	// Make a request just like we do in the request handler functions
+	struct control_msghdr* res = attempt_request(MEMBER_KEEP_ALIVE, NULL, cmh_size);
+	
+	if(!res) {
+		// Something went wrong
+		printf("\n");
+		perror("Disconnected");
 		reconnect();
 	}
 }

@@ -130,7 +130,7 @@ void shutdown_clean() {
 
 void handle_int()
 {
-	printf("%s\n", "ctrl-c caught");
+	printf("\nCtrl-C caught, shutting down immediately\n");
 	shutdown_clean();
 }
 
